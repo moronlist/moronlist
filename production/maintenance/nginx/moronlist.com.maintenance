@@ -1,0 +1,43 @@
+server {
+    server_name moronlist.com www.moronlist.com;
+
+    root /home/moronlistuser/maintenance/moronlist;
+
+    # Serve maintenance page for all routes
+    location / {
+        try_files /index.html =503;
+    }
+
+    # Return 503 for API calls
+    location /api {
+        return 503;
+    }
+
+    # Still allow health checks for monitoring
+    location /health {
+        return 200 'maintenance';
+        add_header Content-Type text/plain;
+    }
+
+    listen [::]:443 ssl ipv6only=on;
+    listen 443 ssl;
+    ssl_certificate /etc/letsencrypt/live/moronlist.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/moronlist.com/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+}
+
+server {
+    if ($host = www.moronlist.com) {
+        return 301 https://$host$request_uri;
+    }
+
+    if ($host = moronlist.com) {
+        return 301 https://$host$request_uri;
+    }
+
+    listen 80;
+    listen [::]:80;
+    server_name moronlist.com www.moronlist.com;
+    return 404;
+}
