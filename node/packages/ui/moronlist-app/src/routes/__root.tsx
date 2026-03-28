@@ -37,8 +37,8 @@ function RootComponent() {
   }, [isAuthenticated, isLoading, needsOnboarding, location.pathname, navigate]);
 
   const handleSignIn = () => {
-    const returnUrl = encodeURIComponent(`${SITE_URL}${location.pathname}`);
-    window.location.href = `${PERSONA_URL}/login?returnUrl=${returnUrl}`;
+    const returnUrl = `${SITE_URL}${location.pathname}`;
+    window.location.href = `${PERSONA_URL}/auth/google?redirect=${encodeURIComponent(returnUrl)}`;
   };
 
   const handleSignOut = async () => {
