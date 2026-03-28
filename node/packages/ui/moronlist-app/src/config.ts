@@ -13,10 +13,10 @@ function required(name: string): string {
   return value;
 }
 
-// API URL (e.g., https://api.moronlist.com or http://localhost:4000)
+// API URL (e.g., https://api.moronlist.com or http://localhost:6000)
 export const API_URL = required("VITE_API_URL");
 
-// Persona URL (e.g., https://persona.moronlist.com or http://localhost:4005)
+// Persona URL (e.g., https://persona.moronlist.com or http://localhost:6005)
 export const PERSONA_URL = required("VITE_PERSONA_URL");
 
 // Site URL (e.g., https://moronlist.com or http://localhost:3000) - used for redirect URLs

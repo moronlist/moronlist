@@ -1,4 +1,4 @@
-const DEFAULT_API_URL = "http://localhost:4000";
+const DEFAULT_API_URL = "http://localhost:6000";
 
 export type SyncState = {
   lists: Record<string, number>;

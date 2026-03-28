@@ -96,7 +96,7 @@ PERSONA_GOOGLE_CLIENT_ID=test-google-client-id
 PERSONA_GOOGLE_CLIENT_SECRET=test-google-client-secret
 
 # Service URLs
-MORONLIST_PUBLIC_URL=http://localhost:4000
+MORONLIST_PUBLIC_URL=http://localhost:6000
 EOF
 
     # Export for docker-compose (volume mounts and env file)
@@ -127,7 +127,7 @@ EOF
     echo "Starting MoronList server..."
     $COMPOSE_CMD up -d moronlist-server
 
-    if ! wait_for_server "http://localhost:4000"; then
+    if ! wait_for_server "http://localhost:6000"; then
       echo "MoronList server failed to start. Showing logs:"
       $COMPOSE_CMD logs moronlist-migrations
       $COMPOSE_CMD logs moronlist-server
@@ -137,7 +137,7 @@ EOF
     fi
 
     echo -e "${GREEN}Running MoronList tests...${NC}"
-    export TEST_URL="http://localhost:4000"
+    export TEST_URL="http://localhost:6000"
     export TEST_DB_PATH="$HOST_DATA_DIR/moronlist/db/moronlist.db"
     cd node/packages/service/moronlist
     npm test || TEST_EXIT_CODE=$?

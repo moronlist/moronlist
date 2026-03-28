@@ -11,15 +11,15 @@ services:
     image: ghcr.io/agilehead/persona:latest
     container_name: persona-server
     ports:
-      - "127.0.0.1:4005:4005"
+      - "127.0.0.1:6005:6005"
     env_file:
       - ${ENV_FILE:-../.env}
     environment:
       # Container-specific paths and hosts (override values from env_file)
       - NODE_ENV=development
       - PERSONA_SERVER_HOST=0.0.0.0
-      - PERSONA_SERVER_PORT=4005
-      - PERSONA_SERVER_PUBLIC_URL=http://localhost:4005
+      - PERSONA_SERVER_PORT=6005
+      - PERSONA_SERVER_PUBLIC_URL=http://localhost:6005
       - PERSONA_DATA_DIR=/app/data/persona/db
       - PERSONA_LOG_FILE_DIR=/app/data/persona/logs
       - PERSONA_TENANT_MODE=single
@@ -34,7 +34,7 @@ services:
           "CMD",
           "node",
           "-e",
-          "require('http').get('http://localhost:4005/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))",
+          "require('http').get('http://localhost:6005/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))",
         ]
       interval: 10s
       timeout: 5s

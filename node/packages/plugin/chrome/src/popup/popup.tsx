@@ -141,7 +141,7 @@ function App() {
                     }))
                   }
                   className="flex-1 text-sm border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-moron-500"
-                  placeholder="http://localhost:4000"
+                  placeholder="http://localhost:6000"
                 />
                 <button
                   onClick={() => handleSaveApiUrl(state.apiUrl)}
