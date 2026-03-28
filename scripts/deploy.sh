@@ -22,6 +22,7 @@ MORONLIST_REMOTE_FRONTEND_DIR="/home/moronlistuser/frontend/moronlist"
 
 # Docker image names (Persona is pulled from ghcr.io, not built locally)
 PERSONA_IMAGE_NAME="ghcr.io/agilehead/persona:latest"
+PERSONA_MIGRATIONS_IMAGE_NAME="ghcr.io/agilehead/persona-migrations:latest"
 MORONLIST_IMAGE_NAME="moronlist-server"
 MORONLIST_MIGRATIONS_IMAGE_NAME="moronlist-migrations"
 
@@ -209,9 +210,11 @@ fi
 echo -e "${YELLOW}Step 2: Saving images to tar files...${NC}"
 TEMP_DIR=$(mktemp -d)
 
-echo "Pulling Persona image from ghcr.io locally..."
+echo "Pulling Persona images from ghcr.io locally..."
 docker pull $PERSONA_IMAGE_NAME
+docker pull $PERSONA_MIGRATIONS_IMAGE_NAME
 docker save $PERSONA_IMAGE_NAME | gzip > "$TEMP_DIR/persona.tar.gz"
+docker save $PERSONA_MIGRATIONS_IMAGE_NAME | gzip > "$TEMP_DIR/persona-migrations.tar.gz"
 
 if [[ "$BUILD_MORONLIST_DOCKER" == true ]]; then
   docker save ${MORONLIST_IMAGE_NAME}:latest | gzip > "$TEMP_DIR/moronlist-server.tar.gz"
@@ -304,6 +307,7 @@ transfer_image() {
 }
 
 transfer_image "$PERSONA_IMAGE_NAME" "persona.tar.gz"
+transfer_image "$PERSONA_MIGRATIONS_IMAGE_NAME" "persona-migrations.tar.gz"
 
 if [[ "$BUILD_MORONLIST_DOCKER" == true ]]; then
   transfer_image "${MORONLIST_IMAGE_NAME}:latest" "moronlist-server.tar.gz"
@@ -316,6 +320,11 @@ echo -e "${GREEN}Images transferred and loaded${NC}"
 
 # Step 7: Run migrations
 echo -e "${YELLOW}Step 7: Running database migrations...${NC}"
+
+ssh $SERVER "cd $REMOTE_APP_DIR && \
+  PERSONA_DATA_HOST_DIR=$PERSONA_DATA_REMOTE_DIR \
+  docker compose run --rm persona-migrations"
+echo -e "${GREEN}Persona migrations complete${NC}"
 
 ssh $SERVER "cd $REMOTE_APP_DIR && \
   MORONLIST_DATA_HOST_DIR=$MORONLIST_DATA_REMOTE_DIR \
