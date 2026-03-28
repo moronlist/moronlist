@@ -1,0 +1,22 @@
+{
+  "name": "moronlist-db",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@tinqerjs/tinqer": "0.0.26",
+    "@tinqerjs/better-sqlite3-adapter": "0.0.26",
+    "better-sqlite3": "^11.7.0",
+    "logger": "*"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.11",
+    "typescript": "^5.9.2"
+  }
+}

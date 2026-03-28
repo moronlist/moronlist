@@ -1,0 +1,25 @@
+{
+  "name": "test-utils",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "Test utilities for MoronList",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@tinqerjs/better-sqlite3-adapter": "0.0.26",
+    "better-sqlite3": "^11.7.0",
+    "knex": "^3.1.0",
+    "moronlist-db": "*",
+    "logger": "*"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.11",
+    "@types/node": "^22.10.2",
+    "typescript": "^5.9.2"
+  }
+}

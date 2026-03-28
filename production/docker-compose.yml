@@ -1,0 +1,102 @@
+# Docker Compose configuration for MoronList (Production)
+# Images are built locally and transferred via deploy.sh
+#
+# Usage:
+#   Production: ENV_FILE=../.env.production docker compose up
+#   Testing:    ENV_FILE=/path/to/.env.test MORONLIST_DATA_HOST_DIR=... docker compose up
+#
+# Note: nginx runs on the host (not in Docker) with certbot SSL
+#
+# Required environment variables:
+#   ENV_FILE - path to env file with secrets (PERSONA_JWT_SECRET, etc.)
+#
+# Host path variables (all have defaults):
+#   PERSONA_DATA_HOST_DIR - host path for persona db (default: ./data/persona/db)
+#   PERSONA_LOG_HOST_DIR - host path for persona logs (default: ./data/persona/logs)
+#   MORONLIST_DATA_HOST_DIR - host path for moronlist db (default: ./data/moronlist/db)
+#   MORONLIST_LOG_HOST_DIR - host path for moronlist logs (default: ./data/moronlist/logs)
+
+services:
+  # Persona Server (Authentication) - Production
+  # Note: Persona is pulled from GitHub Container Registry, not built locally
+  persona-server:
+    image: ghcr.io/agilehead/persona:latest
+    container_name: persona-server
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:4005:4005"
+    env_file:
+      - ${ENV_FILE:-.env}
+    environment:
+      # Container-specific paths and hosts (override values from env_file)
+      - NODE_ENV=production
+      - PERSONA_SERVER_HOST=0.0.0.0
+      - PERSONA_SERVER_PORT=4005
+      - PERSONA_SERVER_PUBLIC_URL=https://persona.moronlist.com
+      - PERSONA_DATA_DIR=/app/data/persona/db
+      - PERSONA_LOG_FILE_DIR=/app/data/persona/logs
+      - PERSONA_TENANT_MODE=single
+      - PERSONA_TENANTS=moronlist
+      - PERSONA_COOKIE_DOMAIN=.moronlist.com
+    volumes:
+      - ${PERSONA_DATA_HOST_DIR:-./data/persona/db}:/app/data/persona/db
+      - ${PERSONA_LOG_HOST_DIR:-./data/persona/logs}:/app/data/persona/logs
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "require('http').get('http://localhost:4005/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Database migrations - runs once and exits
+  moronlist-migrations:
+    image: moronlist-migrations:latest
+    container_name: moronlist-migrations
+    environment:
+      - NODE_ENV=${NODE_ENV:-production}
+      - MORONLIST_DATA_DIR=/app/data/moronlist/db
+    volumes:
+      - ${MORONLIST_DATA_HOST_DIR:-./data/moronlist/db}:/app/data/moronlist/db
+
+  # MoronList Server (Production)
+  # Note: Migrations are run explicitly by deploy.sh, not as a dependency
+  moronlist-server:
+    image: moronlist-server:latest
+    container_name: moronlist-server
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:4000:4000"
+    env_file:
+      - ${ENV_FILE:-.env}
+    environment:
+      # Container-specific paths (override values from env_file)
+      - MORONLIST_DATA_DIR=/app/data/moronlist/db
+      - MORONLIST_LOG_FILE_DIR=/app/data/moronlist/logs
+      # Container-specific hosts
+      - MORONLIST_SERVER_HOST=0.0.0.0
+      - MORONLIST_SERVER_PORT=4000
+      - PERSONA_URL=http://persona-server:4005
+    volumes:
+      - ${MORONLIST_DATA_HOST_DIR:-./data/moronlist/db}:/app/data/moronlist/db
+      - ${MORONLIST_LOG_HOST_DIR:-./data/moronlist/logs}:/app/data/moronlist/logs
+    depends_on:
+      persona-server:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "require('http').get('http://localhost:4000/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
