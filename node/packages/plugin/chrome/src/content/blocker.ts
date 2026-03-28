@@ -11,10 +11,9 @@ const state: BlockState = {
 };
 
 const MORONLIST_ATTR = "data-moronlist-processed";
-const MORONLIST_BLOCKED_ATTR = "data-moronlist-blocked";
 const MORONLIST_BTN_ATTR = "data-moronlist-btn";
 
-const DEBOUNCE_MS = 150;
+const DEBOUNCE_MS = 100;
 
 function flattenUserSet(users: Record<string, string[]>): Set<string> {
   const flat = new Set<string>();
@@ -50,45 +49,24 @@ function isBlocked(username: string): boolean {
 }
 
 function extractUsernameFromTweet(tweetElement: Element): string | null {
-  const userLink = tweetElement.querySelector('a[href^="/"][role="link"] > div > span');
-  if (userLink !== null) {
-    const text = userLink.textContent;
-    if (text !== null && text.startsWith("@")) {
-      return text.slice(1);
+  // Primary: UserAvatar-Container-{username} data-testid attribute
+  // This is the most reliable selector — X puts the username directly in the attribute
+  const avatarContainers = tweetElement.querySelectorAll('[data-testid^="UserAvatar-Container-"]');
+  if (avatarContainers.length > 0) {
+    // First avatar is the tweet author (subsequent ones may be quoted tweets)
+    const firstAvatar = avatarContainers[0];
+    if (firstAvatar !== undefined) {
+      const testId = firstAvatar.getAttribute("data-testid");
+      if (testId !== null) {
+        const username = testId.replace("UserAvatar-Container-", "");
+        if (username.length > 0) {
+          return username;
+        }
+      }
     }
   }
 
-  const allLinks = tweetElement.querySelectorAll('a[href^="/"]');
-  for (const link of allLinks) {
-    const href = link.getAttribute("href");
-    if (href === null) {
-      continue;
-    }
-    const match = href.match(/^\/([a-zA-Z0-9_]+)(\/|$)/);
-    if (match === null || match[1] === undefined) {
-      continue;
-    }
-    const candidate = match[1];
-    const reserved = [
-      "home",
-      "explore",
-      "notifications",
-      "messages",
-      "settings",
-      "search",
-      "compose",
-      "i",
-      "hashtag",
-    ];
-    if (reserved.includes(candidate.toLowerCase())) {
-      continue;
-    }
-    const parentDiv = link.closest('[data-testid="User-Name"]');
-    if (parentDiv !== null) {
-      return candidate;
-    }
-  }
-
+  // Fallback: find @handle in User-Name container
   const userNameDiv = tweetElement.querySelector('[data-testid="User-Name"]');
   if (userNameDiv !== null) {
     const spans = userNameDiv.querySelectorAll("span");
@@ -96,6 +74,21 @@ function extractUsernameFromTweet(tweetElement: Element): string | null {
       const text = span.textContent;
       if (text !== null && text.startsWith("@")) {
         return text.slice(1);
+      }
+    }
+  }
+
+  // Last resort: profile link href in User-Name area
+  const userNameArea = tweetElement.querySelector('[data-testid="User-Name"]');
+  if (userNameArea !== null) {
+    const profileLink = userNameArea.querySelector('a[href^="/"][role="link"]');
+    if (profileLink !== null) {
+      const href = profileLink.getAttribute("href");
+      if (href !== null) {
+        const match = href.match(/^\/([a-zA-Z0-9_]+)$/);
+        if (match !== null && match[1] !== undefined) {
+          return match[1];
+        }
       }
     }
   }
@@ -133,16 +126,12 @@ function extractUsernameFromProfilePage(): string | null {
   return null;
 }
 
-function hideTweet(tweetElement: Element): void {
-  const el = tweetElement as HTMLElement;
-  el.style.display = "none";
-  el.setAttribute(MORONLIST_BLOCKED_ATTR, "true");
+function markBlocked(tweetElement: Element): void {
+  tweetElement.setAttribute(MORONLIST_ATTR, "blocked");
 }
 
-function showTweet(tweetElement: Element): void {
-  const el = tweetElement as HTMLElement;
-  el.style.display = "";
-  el.removeAttribute(MORONLIST_BLOCKED_ATTR);
+function markVisible(tweetElement: Element): void {
+  tweetElement.setAttribute(MORONLIST_ATTR, "ok");
 }
 
 function createAddButton(username: string): HTMLElement {
@@ -186,65 +175,63 @@ function createAddButton(username: string): HTMLElement {
 }
 
 function processTweet(tweetElement: Element): void {
-  if (tweetElement.hasAttribute(MORONLIST_ATTR)) {
-    const prevUsername = tweetElement.getAttribute(MORONLIST_ATTR);
-    if (prevUsername !== null && prevUsername.length > 0) {
-      if (isBlocked(prevUsername)) {
-        hideTweet(tweetElement);
+  // Already processed — re-evaluate block status on reprocess
+  const currentAttr = tweetElement.getAttribute(MORONLIST_ATTR);
+  if (currentAttr === "ok" || currentAttr === "blocked") {
+    const username = tweetElement.getAttribute("data-moronlist-username");
+    if (username !== null && username.length > 0) {
+      if (isBlocked(username)) {
+        markBlocked(tweetElement);
       } else {
-        showTweet(tweetElement);
+        markVisible(tweetElement);
       }
-      return;
     }
+    return;
   }
 
   const username = extractUsernameFromTweet(tweetElement);
   if (username === null) {
+    // Can't determine user — show the tweet anyway
+    markVisible(tweetElement);
     return;
   }
 
-  tweetElement.setAttribute(MORONLIST_ATTR, username);
+  tweetElement.setAttribute("data-moronlist-username", username);
 
   if (isBlocked(username)) {
-    hideTweet(tweetElement);
+    markBlocked(tweetElement);
     return;
   }
 
+  markVisible(tweetElement);
+
+  // Add ML quick-add button
   const userNameContainer = tweetElement.querySelector('[data-testid="User-Name"]');
   if (userNameContainer !== null) {
     const existingBtn = userNameContainer.querySelector(`[${MORONLIST_BTN_ATTR}]`);
     if (existingBtn === null) {
       const btn = createAddButton(username);
       userNameContainer.appendChild(btn);
-
-      tweetElement.addEventListener("mouseenter", () => {
-        btn.style.opacity = "1";
-      });
-      tweetElement.addEventListener("mouseleave", () => {
-        btn.style.opacity = "0";
-      });
     }
   }
 }
 
 function processTweets(): void {
-  const tweets = document.querySelectorAll(
-    'article[data-testid="tweet"], [data-testid="cellInnerDiv"]'
-  );
+  const tweets = document.querySelectorAll('article[data-testid="tweet"]');
   for (const tweet of tweets) {
     processTweet(tweet);
   }
 }
 
 function reprocessAllTweets(): void {
-  const processed = document.querySelectorAll(`[${MORONLIST_ATTR}]`);
+  const processed = document.querySelectorAll("[data-moronlist-username]");
   for (const el of processed) {
-    const username = el.getAttribute(MORONLIST_ATTR);
+    const username = el.getAttribute("data-moronlist-username");
     if (username !== null && username.length > 0) {
       if (isBlocked(username)) {
-        hideTweet(el);
+        markBlocked(el);
       } else {
-        showTweet(el);
+        markVisible(el);
       }
     }
   }
@@ -252,14 +239,21 @@ function reprocessAllTweets(): void {
 }
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+let rafPending = false;
 
 function debouncedProcessTweets(): void {
   if (debounceTimer !== null) {
     clearTimeout(debounceTimer);
   }
   debounceTimer = setTimeout(() => {
-    processTweets();
     debounceTimer = null;
+    if (!rafPending) {
+      rafPending = true;
+      requestAnimationFrame(() => {
+        processTweets();
+        rafPending = false;
+      });
+    }
   }, DEBOUNCE_MS);
 }
 
