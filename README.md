@@ -1,0 +1,2 @@
+# moronlist
+MoronList Server
