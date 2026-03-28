@@ -163,10 +163,9 @@ function createAddButton(username: string): HTMLElement {
   btn.addEventListener("click", (e) => {
     e.preventDefault();
     e.stopPropagation();
+    // Set pending username and open the popup for list selection
     chrome.runtime.sendMessage({
-      type: "ADD_ENTRY",
-      platform: "twitter",
-      slug: "",
+      type: "OPEN_QUICK_ADD",
       platformUserId: username,
     });
   });

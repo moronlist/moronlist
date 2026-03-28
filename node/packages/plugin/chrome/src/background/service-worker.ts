@@ -1,5 +1,11 @@
 import { scheduleSync, isSyncAlarm, performFullSync, performSync } from "../lib/sync.js";
-import { getBlockedUsers, getSaintedUsers, getLastSyncTime, getMyLists } from "../lib/storage.js";
+import {
+  getBlockedUsers,
+  getSaintedUsers,
+  getLastSyncTime,
+  getMyLists,
+  setPendingUsername,
+} from "../lib/storage.js";
 import { addEntry, addSaint, fetchMe } from "../lib/api-client.js";
 
 export type MessageType =
@@ -9,7 +15,8 @@ export type MessageType =
   | { type: "CHECK_USER"; platformUserId: string }
   | { type: "GET_STATUS" }
   | { type: "GET_BLOCKED_SET" }
-  | { type: "BLOCK_LIST_UPDATED" };
+  | { type: "BLOCK_LIST_UPDATED" }
+  | { type: "OPEN_QUICK_ADD"; platformUserId: string };
 
 export type CheckUserResponse = {
   blocked: boolean;
@@ -160,6 +167,12 @@ async function handleMessage(message: MessageType): Promise<unknown> {
     }
 
     case "BLOCK_LIST_UPDATED": {
+      return { ok: true };
+    }
+
+    case "OPEN_QUICK_ADD": {
+      await setPendingUsername(message.platformUserId);
+      await chrome.action.openPopup();
       return { ok: true };
     }
 

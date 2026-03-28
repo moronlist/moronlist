@@ -23,6 +23,8 @@ type StorageSchema = {
   saintedUsers: SaintedUsers;
   lastSyncTime: number | null;
   myLists: OwnedList[];
+  lastSelectedListIds: string[];
+  pendingUsername: string | null;
 };
 
 async function getItem<K extends keyof StorageSchema>(
@@ -98,6 +100,22 @@ export async function getMyLists(): Promise<OwnedList[]> {
 
 export async function setMyLists(lists: OwnedList[]): Promise<void> {
   return setItem("myLists", lists);
+}
+
+export async function getLastSelectedListIds(): Promise<string[]> {
+  return getItem("lastSelectedListIds", []);
+}
+
+export async function setLastSelectedListIds(ids: string[]): Promise<void> {
+  return setItem("lastSelectedListIds", ids);
+}
+
+export async function getPendingUsername(): Promise<string | null> {
+  return getItem("pendingUsername", null);
+}
+
+export async function setPendingUsername(username: string | null): Promise<void> {
+  return setItem("pendingUsername", username);
 }
 
 export async function clearAll(): Promise<void> {

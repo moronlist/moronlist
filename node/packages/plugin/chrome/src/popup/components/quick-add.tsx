@@ -1,5 +1,11 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import type { Subscription, Result } from "../../lib/api-client.js";
+import {
+  getLastSelectedListIds,
+  setLastSelectedListIds,
+  getPendingUsername,
+  setPendingUsername,
+} from "../../lib/storage.js";
 
 type QuickAddProps = {
   subscriptions: Subscription[];
@@ -11,52 +17,100 @@ type AddMode = "moron" | "saint";
 export function QuickAdd({ subscriptions, onAdded }: QuickAddProps) {
   const [username, setUsername] = useState("");
   const [reason, setReason] = useState("");
-  const [selectedListId, setSelectedListId] = useState<string>("");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [mode, setMode] = useState<AddMode>("moron");
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
 
-  const selectedSub = subscriptions.find((s) => s.id === selectedListId);
+  // Load last selected lists and any pending username from content script
+  useEffect(() => {
+    const load = async (): Promise<void> => {
+      const [lastIds, pending] = await Promise.all([
+        getLastSelectedListIds(),
+        getPendingUsername(),
+      ]);
+
+      if (lastIds.length > 0) {
+        // Only keep IDs that still exist in subscriptions
+        const validIds = lastIds.filter((id) => subscriptions.some((s) => s.id === id));
+        setSelectedIds(new Set(validIds));
+      }
+
+      if (pending !== null && pending.length > 0) {
+        setUsername(pending.replace(/^@/, ""));
+        await setPendingUsername(null);
+      }
+    };
+    load();
+  }, [subscriptions]);
+
+  const toggleList = useCallback((listId: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(listId)) {
+        next.delete(listId);
+      } else {
+        next.add(listId);
+      }
+      setLastSelectedListIds([...next]);
+      return next;
+    });
+  }, []);
 
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault();
-      if (selectedSub === undefined || username.trim().length === 0) {
+      if (selectedIds.size === 0 || username.trim().length === 0) {
         return;
       }
 
       setSubmitting(true);
       setFeedback(null);
 
-      try {
-        const messageType = mode === "moron" ? "ADD_ENTRY" : "ADD_SAINT";
-        const result = (await chrome.runtime.sendMessage({
-          type: messageType,
-          platform: selectedSub.platform,
-          slug: selectedSub.slug,
-          platformUserId: username.trim().replace(/^@/, ""),
-          reason: reason.trim().length > 0 ? reason.trim() : undefined,
-        })) as Result<unknown>;
+      const cleanUsername = username.trim().replace(/^@/, "");
+      const messageType = mode === "moron" ? "ADD_ENTRY" : "ADD_SAINT";
+      const selectedSubs = subscriptions.filter((s) => selectedIds.has(s.id));
 
-        if (result.success) {
-          setFeedback(
-            mode === "moron"
-              ? `Added @${username.trim()} as a moron`
-              : `Added @${username.trim()} as a saint`
-          );
-          setUsername("");
-          setReason("");
-          onAdded();
-        } else {
-          setFeedback(`Error: ${result.error}`);
+      let successCount = 0;
+      let errorCount = 0;
+
+      for (const sub of selectedSubs) {
+        try {
+          const result = (await chrome.runtime.sendMessage({
+            type: messageType,
+            platform: sub.platform,
+            slug: sub.slug,
+            platformUserId: cleanUsername,
+            reason: reason.trim().length > 0 ? reason.trim() : undefined,
+          })) as Result<unknown>;
+
+          if (result.success) {
+            successCount++;
+          } else {
+            errorCount++;
+          }
+        } catch {
+          errorCount++;
         }
-      } catch (err) {
-        setFeedback(err instanceof Error ? err.message : "Failed to add entry");
-      } finally {
-        setSubmitting(false);
       }
+
+      if (errorCount === 0) {
+        const label = mode === "moron" ? "moron" : "saint";
+        setFeedback(
+          `Added @${cleanUsername} as ${label} to ${String(successCount)} list${successCount > 1 ? "s" : ""}`
+        );
+        setUsername("");
+        setReason("");
+        onAdded();
+      } else {
+        setFeedback(
+          `Added to ${String(successCount)}, failed on ${String(errorCount)} list${errorCount > 1 ? "s" : ""}`
+        );
+      }
+
+      setSubmitting(false);
     },
-    [selectedSub, username, reason, mode, onAdded]
+    [selectedIds, username, reason, mode, subscriptions, onAdded]
   );
 
   if (subscriptions.length === 0) {
@@ -68,21 +122,6 @@ export function QuickAdd({ subscriptions, onAdded }: QuickAddProps) {
       <h2 className="text-sm font-semibold text-gray-700 mb-2">Quick Add</h2>
 
       <form onSubmit={handleSubmit} className="space-y-2">
-        <div>
-          <select
-            value={selectedListId}
-            onChange={(e) => setSelectedListId(e.target.value)}
-            className="w-full text-sm border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-moron-500 bg-white"
-          >
-            <option value="">Select a list...</option>
-            {subscriptions.map((sub) => (
-              <option key={sub.id} value={sub.id}>
-                {sub.name} ({sub.platform}/{sub.slug})
-              </option>
-            ))}
-          </select>
-        </div>
-
         <div>
           <input
             type="text"
@@ -101,6 +140,26 @@ export function QuickAdd({ subscriptions, onAdded }: QuickAddProps) {
             placeholder="Reason (optional)"
             className="w-full text-sm border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-moron-500"
           />
+        </div>
+
+        <div className="max-h-32 overflow-y-auto border border-gray-200 rounded">
+          {subscriptions.map((sub) => (
+            <label
+              key={sub.id}
+              className="flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50 cursor-pointer text-sm"
+            >
+              <input
+                type="checkbox"
+                checked={selectedIds.has(sub.id)}
+                onChange={() => toggleList(sub.id)}
+                className="rounded border-gray-300 text-moron-500 focus:ring-moron-500"
+              />
+              <span className="truncate text-gray-700">{sub.name}</span>
+              <span className="text-xs text-gray-400 ml-auto flex-shrink-0">
+                {sub.platform}/{sub.slug}
+              </span>
+            </label>
+          ))}
         </div>
 
         <div className="flex items-center gap-2">
@@ -127,10 +186,12 @@ export function QuickAdd({ subscriptions, onAdded }: QuickAddProps) {
 
           <button
             type="submit"
-            disabled={submitting || selectedListId.length === 0 || username.trim().length === 0}
+            disabled={submitting || selectedIds.size === 0 || username.trim().length === 0}
             className="text-xs bg-moron-500 text-white px-4 py-1.5 rounded hover:bg-moron-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
-            {submitting ? "Adding..." : "Add"}
+            {submitting
+              ? "Adding..."
+              : `Add to ${String(selectedIds.size)} list${selectedIds.size !== 1 ? "s" : ""}`}
           </button>
         </div>
       </form>
@@ -138,7 +199,9 @@ export function QuickAdd({ subscriptions, onAdded }: QuickAddProps) {
       {feedback !== null && (
         <div
           className={`mt-2 text-xs p-2 rounded ${
-            feedback.startsWith("Error") ? "bg-red-50 text-red-600" : "bg-green-50 text-green-600"
+            feedback.startsWith("Added to 0") || feedback.includes("failed")
+              ? "bg-red-50 text-red-600"
+              : "bg-green-50 text-green-600"
           }`}
         >
           {feedback}
