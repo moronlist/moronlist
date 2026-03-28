@@ -9,6 +9,7 @@
 import { Router, type Request, type Response } from "express";
 import { logger } from "logger";
 import type { Repositories } from "../repositories/interfaces/index.js";
+import { param } from "../middleware/params.js";
 
 export function createUserRoutes(repos: Repositories): Router {
   const router = Router();
@@ -16,7 +17,7 @@ export function createUserRoutes(repos: Repositories): Router {
   // GET /api/users/:id
   router.get("/:id", (req: Request, res: Response) => {
     try {
-      const userId = req.params.id;
+      const userId = param(req, "id");
       if (userId === undefined || userId === "") {
         res.status(400).json({ error: "User ID is required" });
         return;
@@ -45,7 +46,7 @@ export function createUserRoutes(repos: Repositories): Router {
   // GET /api/users/:id/morons
   router.get("/:id/morons", (req: Request, res: Response) => {
     try {
-      const userId = req.params.id;
+      const userId = param(req, "id");
       if (userId === undefined || userId === "") {
         res.status(400).json({ error: "User ID is required" });
         return;

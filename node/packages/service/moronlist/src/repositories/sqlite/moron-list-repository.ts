@@ -185,7 +185,7 @@ function findPopularByPlatform(
           created_at: l.created_at,
           updated_at: l.updated_at,
         }))
-        .orderBy((l) => l.version, "desc")
+        .orderByDescending((l) => l.version)
         .skip(p.offset)
         .take(p.limit),
     { platform, visibility: "public", offset, limit }

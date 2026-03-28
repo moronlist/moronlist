@@ -8,6 +8,7 @@ import { logger } from "logger";
 import type { Repositories } from "../repositories/interfaces/index.js";
 import type { PersonaClient } from "../services/persona-client.js";
 import { requireAuth, type AuthenticatedRequest } from "../middleware/auth.js";
+import { param } from "../middleware/params.js";
 import { createAuthRoutes } from "./auth.js";
 import { createUserRoutes } from "./users.js";
 import { createMoronRoutes } from "./morons.js";
@@ -114,7 +115,8 @@ export function wireRoutes(app: Express, repos: Repositories, personaClient: Per
   // Changelog route (inline since it's a single GET)
   app.get("/api/morons/:platform/:slug/changelog", (req: Request, res: Response) => {
     try {
-      const { platform, slug } = req.params;
+      const platform = param(req, "platform");
+      const slug = param(req, "slug");
       if (platform === undefined || slug === undefined) {
         res.status(400).json({ error: "Platform and slug are required" });
         return;

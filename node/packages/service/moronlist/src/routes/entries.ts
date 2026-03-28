@@ -13,6 +13,7 @@ import { Router, type Request, type Response } from "express";
 import { logger } from "logger";
 import type { Repositories } from "../repositories/interfaces/index.js";
 import { requireAuth, optionalAuth, type AuthenticatedRequest } from "../middleware/auth.js";
+import { param } from "../middleware/params.js";
 import {
   paginationQuery,
   createEntryBody,
@@ -27,7 +28,8 @@ export function createEntryRoutes(repos: Repositories): Router {
   // GET /entries?offset=&limit=
   router.get("/", optionalAuth, (req: Request, res: Response) => {
     try {
-      const { platform, slug } = req.params;
+      const platform = param(req, "platform");
+      const slug = param(req, "slug");
       if (platform === undefined || slug === undefined) {
         res.status(400).json({ error: "Platform and slug are required" });
         return;
@@ -70,7 +72,8 @@ export function createEntryRoutes(repos: Repositories): Router {
   // POST /entries
   router.post("/", requireAuth, (req: Request, res: Response) => {
     try {
-      const { platform, slug } = req.params;
+      const platform = param(req, "platform");
+      const slug = param(req, "slug");
       if (platform === undefined || slug === undefined) {
         res.status(400).json({ error: "Platform and slug are required" });
         return;
@@ -146,7 +149,8 @@ export function createEntryRoutes(repos: Repositories): Router {
   // POST /entries/batch
   router.post("/batch", requireAuth, (req: Request, res: Response) => {
     try {
-      const { platform, slug } = req.params;
+      const platform = param(req, "platform");
+      const slug = param(req, "slug");
       if (platform === undefined || slug === undefined) {
         res.status(400).json({ error: "Platform and slug are required" });
         return;
@@ -229,7 +233,9 @@ export function createEntryRoutes(repos: Repositories): Router {
   // DELETE /entries/:entryId
   router.delete("/:entryId", requireAuth, (req: Request, res: Response) => {
     try {
-      const { platform, slug, entryId } = req.params;
+      const platform = param(req, "platform");
+      const slug = param(req, "slug");
+      const entryId = param(req, "entryId");
       if (platform === undefined || slug === undefined || entryId === undefined) {
         res.status(400).json({ error: "Platform, slug, and entry ID are required" });
         return;
@@ -291,7 +297,8 @@ export function createEntryRoutes(repos: Repositories): Router {
   // For DELETE /entries?platformUserId=xxx, we add a separate handler:
   router.delete("/", requireAuth, (req: Request, res: Response) => {
     try {
-      const { platform, slug } = req.params;
+      const platform = param(req, "platform");
+      const slug = param(req, "slug");
       if (platform === undefined || slug === undefined) {
         res.status(400).json({ error: "Platform and slug are required" });
         return;

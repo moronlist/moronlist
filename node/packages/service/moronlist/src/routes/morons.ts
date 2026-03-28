@@ -21,6 +21,7 @@ import {
   type AuthenticatedRequest,
   type PersonaJWTPayload,
 } from "../middleware/auth.js";
+import { param } from "../middleware/params.js";
 import {
   createMoronListBody,
   updateMoronListBody,
@@ -88,7 +89,7 @@ export function createMoronRoutes(repos: Repositories): Router {
   // GET /api/morons/:platform/search - search lists (must be before :slug route)
   router.get("/:platform/search", (req: Request, res: Response) => {
     try {
-      const platform = req.params.platform;
+      const platform = param(req, "platform");
       if (platform === undefined) {
         res.status(400).json({ error: "Platform is required" });
         return;
@@ -123,7 +124,7 @@ export function createMoronRoutes(repos: Repositories): Router {
   // GET /api/morons/:platform/popular - popular lists (must be before :slug route)
   router.get("/:platform/popular", (req: Request, res: Response) => {
     try {
-      const platform = req.params.platform;
+      const platform = param(req, "platform");
       if (platform === undefined) {
         res.status(400).json({ error: "Platform is required" });
         return;
@@ -158,7 +159,8 @@ export function createMoronRoutes(repos: Repositories): Router {
   // GET /api/morons/:platform/:slug - get list
   router.get("/:platform/:slug", optionalAuth, (req: Request, res: Response) => {
     try {
-      const { platform, slug } = req.params;
+      const platform = param(req, "platform");
+      const slug = param(req, "slug");
       if (platform === undefined || slug === undefined) {
         res.status(400).json({ error: "Platform and slug are required" });
         return;
@@ -201,7 +203,8 @@ export function createMoronRoutes(repos: Repositories): Router {
   // PUT /api/morons/:platform/:slug - update list
   router.put("/:platform/:slug", requireAuth, (req: Request, res: Response) => {
     try {
-      const { platform, slug } = req.params;
+      const platform = param(req, "platform");
+      const slug = param(req, "slug");
       if (platform === undefined || slug === undefined) {
         res.status(400).json({ error: "Platform and slug are required" });
         return;
@@ -245,7 +248,8 @@ export function createMoronRoutes(repos: Repositories): Router {
   // DELETE /api/morons/:platform/:slug - delete list
   router.delete("/:platform/:slug", requireAuth, (req: Request, res: Response) => {
     try {
-      const { platform, slug } = req.params;
+      const platform = param(req, "platform");
+      const slug = param(req, "slug");
       if (platform === undefined || slug === undefined) {
         res.status(400).json({ error: "Platform and slug are required" });
         return;
@@ -277,7 +281,8 @@ export function createMoronRoutes(repos: Repositories): Router {
   // POST /api/morons/:platform/:slug/fork - fork list
   router.post("/:platform/:slug/fork", requireAuth, (req: Request, res: Response) => {
     try {
-      const { platform, slug } = req.params;
+      const platform = param(req, "platform");
+      const slug = param(req, "slug");
       if (platform === undefined || slug === undefined) {
         res.status(400).json({ error: "Platform and slug are required" });
         return;
@@ -332,7 +337,7 @@ export function createMoronRoutes(repos: Repositories): Router {
   // This must be LAST among /:platform/* routes because the others are more specific
   router.get("/:platform", (req: Request, res: Response) => {
     try {
-      const platform = req.params.platform;
+      const platform = param(req, "platform");
       if (platform === undefined) {
         res.status(400).json({ error: "Platform is required" });
         return;

@@ -18,6 +18,7 @@ import {
   type AuthenticatedRequest,
   type PersonaJWTPayload,
 } from "../middleware/auth.js";
+import { param } from "../middleware/params.js";
 import {
   paginationQuery,
   createSaintBody,
@@ -32,7 +33,8 @@ export function createSaintRoutes(repos: Repositories): Router {
   // GET /saints?offset=&limit=
   router.get("/", optionalAuth, (req: Request, res: Response) => {
     try {
-      const { platform, slug } = req.params;
+      const platform = param(req, "platform");
+      const slug = param(req, "slug");
       if (platform === undefined || slug === undefined) {
         res.status(400).json({ error: "Platform and slug are required" });
         return;
@@ -75,7 +77,8 @@ export function createSaintRoutes(repos: Repositories): Router {
   // POST /saints
   router.post("/", requireAuth, (req: Request, res: Response) => {
     try {
-      const { platform, slug } = req.params;
+      const platform = param(req, "platform");
+      const slug = param(req, "slug");
       if (platform === undefined || slug === undefined) {
         res.status(400).json({ error: "Platform and slug are required" });
         return;
@@ -149,7 +152,8 @@ export function createSaintRoutes(repos: Repositories): Router {
   // POST /saints/batch
   router.post("/batch", requireAuth, (req: Request, res: Response) => {
     try {
-      const { platform, slug } = req.params;
+      const platform = param(req, "platform");
+      const slug = param(req, "slug");
       if (platform === undefined || slug === undefined) {
         res.status(400).json({ error: "Platform and slug are required" });
         return;
@@ -230,7 +234,9 @@ export function createSaintRoutes(repos: Repositories): Router {
   // DELETE /saints/:saintId
   router.delete("/:saintId", requireAuth, (req: Request, res: Response) => {
     try {
-      const { platform, slug, saintId } = req.params;
+      const platform = param(req, "platform");
+      const slug = param(req, "slug");
+      const saintId = param(req, "saintId");
       if (platform === undefined || slug === undefined || saintId === undefined) {
         res.status(400).json({ error: "Platform, slug, and saint ID are required" });
         return;
@@ -286,7 +292,8 @@ export function createSaintRoutes(repos: Repositories): Router {
   // DELETE /saints?platformUserId=
   router.delete("/", requireAuth, (req: Request, res: Response) => {
     try {
-      const { platform, slug } = req.params;
+      const platform = param(req, "platform");
+      const slug = param(req, "slug");
       if (platform === undefined || slug === undefined) {
         res.status(400).json({ error: "Platform and slug are required" });
         return;
