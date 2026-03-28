@@ -1,7 +1,28 @@
-[data-moronlist-blocked="true"] {
+/* Pre-hide unprocessed tweets to prevent flash of blocked content.
+   Tweets are invisible until the content script processes them,
+   then fade in if allowed. Blocked tweets never become visible. */
+article[data-testid="tweet"]:not([data-moronlist-processed]) {
+  opacity: 0 !important;
+  max-height: 0 !important;
+  overflow: hidden !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: none !important;
+  transition: none;
+}
+
+article[data-testid="tweet"][data-moronlist-processed="ok"] {
+  opacity: 1;
+  max-height: none;
+  overflow: visible;
+  transition: opacity 0.1s ease;
+}
+
+article[data-testid="tweet"][data-moronlist-processed="blocked"] {
   display: none !important;
 }
 
+/* ML quick-add button */
 [data-moronlist-btn] {
   display: inline-flex;
   align-items: center;
@@ -27,11 +48,11 @@
   background: #dc2626;
 }
 
-article:hover [data-moronlist-btn],
-[data-testid="cellInnerDiv"]:hover [data-moronlist-btn] {
+article[data-testid="tweet"]:hover [data-moronlist-btn] {
   opacity: 1;
 }
 
+/* Profile page blocked banner */
 #moronlist-profile-banner {
   position: fixed;
   top: 0;
