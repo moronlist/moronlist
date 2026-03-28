@@ -17,6 +17,17 @@
 #   MORONLIST_LOG_HOST_DIR - host path for moronlist logs (default: ./data/moronlist/logs)
 
 services:
+  # Persona Database migrations - runs once and exits
+  # Pulled from GitHub Container Registry
+  persona-migrations:
+    image: ghcr.io/agilehead/persona-migrations:latest
+    container_name: persona-migrations
+    environment:
+      - NODE_ENV=${NODE_ENV:-production}
+      - PERSONA_DATA_DIR=/app/data/persona/db
+    volumes:
+      - ${PERSONA_DATA_HOST_DIR:-./data/persona/db}:/app/data/persona/db
+
   # Persona Server (Authentication) - Production
   # Note: Persona is pulled from GitHub Container Registry, not built locally
   persona-server:
