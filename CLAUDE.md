@@ -156,6 +156,103 @@ All environment variables must be validated at startup in `src/config.ts`. The a
 - **Result types** for all domain functions
 - **Context pattern** for database and auth
 
+## Deployment
+
+### Server Access
+
+SSH access to the production server as the application user:
+
+```bash
+ssh moronlistuser@moronlist.com
+```
+
+**NEVER attempt to SSH as root** — you do not have root access. All deployment, maintenance, and backup operations run as `moronlistuser`. If something requires root (e.g., nginx changes, SSL cert issues), escalate to the infrastructure team.
+
+### Prerequisites
+
+- SSH access to `moronlistuser@moronlist.com`
+- Docker images build locally, get transferred to the server via scp
+- The server runs rootless Docker under `moronlistuser`
+- Nginx runs on the host with SSL via certbot
+
+### Deploy Commands
+
+```bash
+# Full deploy (builds only what changed since last deploy)
+./scripts/deploy.sh
+
+# Force rebuild everything regardless of changes
+./scripts/deploy.sh --force-build
+
+# Deploy only the frontend (no Docker rebuild)
+./scripts/deploy.sh --frontend-only
+
+# Skip building, deploy existing local artifacts
+./scripts/deploy.sh --skip-build
+```
+
+### How Change Detection Works
+
+The deploy script stores the last deployed git commit on the server. On each deploy, it diffs against that commit to determine what needs rebuilding:
+
+- **Shared files changed** (package.json, package-lock.json, tsconfig.base.json, production/) — rebuilds everything
+- **Service files changed** (node/packages/service/moronlist/, node/packages/lib/, database/, knexfile.moronlist.js) — rebuilds Docker images only
+- **Frontend files changed** (node/packages/ui/moronlist-app/) — rebuilds frontend only
+- **First deploy or commit not in history** — rebuilds everything
+
+Migrations always run regardless of what changed.
+
+### Server Layout
+
+```
+/home/moronlistuser/
+  moronlist/              # Deploy dir (docker-compose.yml, .env)
+  data/
+    persona/db/           # Persona SQLite DB
+    persona/logs/
+    moronlist/db/         # MoronList SQLite DB
+    moronlist/logs/
+  frontend/
+    moronlist/            # Static frontend (served by nginx)
+  maintenance/            # Maintenance mode pages + scripts
+```
+
+### Ports
+
+- `6000` — moronlist-server (proxied via `api.moronlist.com`)
+- `6005` — persona-server (proxied via `persona.moronlist.com`)
+
+These are intentionally different from Lesser (4000/4005) to avoid conflicts on the shared server.
+
+### Maintenance Mode
+
+SSH into the server and run from `/home/moronlistuser/maintenance/`:
+
+```bash
+./maintenance-on.sh     # Swaps nginx to maintenance page
+./maintenance-off.sh    # Restores normal nginx config
+```
+
+### Backups
+
+```bash
+# Full backup from production to local machine
+./scripts/backup.sh --full
+
+# Incremental backup (databases only, diffed against last full)
+./scripts/backup.sh
+
+# Restore backup into local dev environment
+./scripts/restore-backup.sh                          # Downloads fresh from production
+./scripts/restore-backup.sh /path/to/backup/dir      # Restores from local backup
+```
+
+Backups are saved to `~/servers/backup/moronlist/` by default.
+
+### Environment Variables
+
+The server's `.env` is at `/home/moronlistuser/moronlist/.env`. It is only copied on first deploy (from local `.env.production`). After that, edit it directly on the server via SSH. The deploy script never overwrites it.
+
 ## Essential Commands & Workflow
 
 ### Git Workflow
