@@ -16,6 +16,7 @@ import {
   type AuthenticatedRequest,
   type PersonaJWTPayload,
 } from "../middleware/auth.js";
+import { param } from "../middleware/params.js";
 import { updateParentsBody } from "../validation/schemas.js";
 import { setParents, resolveAncestorTree } from "../domain/inheritance.js";
 import { canReadList } from "../domain/moron-list.js";
@@ -26,7 +27,8 @@ export function createInheritanceRoutes(repos: Repositories): Router {
   // GET /parents
   router.get("/parents", optionalAuth, (req: Request, res: Response) => {
     try {
-      const { platform, slug } = req.params;
+      const platform = param(req, "platform");
+      const slug = param(req, "slug");
       if (platform === undefined || slug === undefined) {
         res.status(400).json({ error: "Platform and slug are required" });
         return;
@@ -66,7 +68,8 @@ export function createInheritanceRoutes(repos: Repositories): Router {
   // PUT /parents - full replace
   router.put("/parents", requireAuth, (req: Request, res: Response) => {
     try {
-      const { platform, slug } = req.params;
+      const platform = param(req, "platform");
+      const slug = param(req, "slug");
       if (platform === undefined || slug === undefined) {
         res.status(400).json({ error: "Platform and slug are required" });
         return;
@@ -128,7 +131,8 @@ export function createInheritanceRoutes(repos: Repositories): Router {
   // GET /resolve - full ancestor tree
   router.get("/resolve", optionalAuth, (req: Request, res: Response) => {
     try {
-      const { platform, slug } = req.params;
+      const platform = param(req, "platform");
+      const slug = param(req, "slug");
       if (platform === undefined || slug === undefined) {
         res.status(400).json({ error: "Platform and slug are required" });
         return;

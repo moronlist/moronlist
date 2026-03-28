@@ -10,6 +10,7 @@ import { Router, type Request, type Response } from "express";
 import { logger } from "logger";
 import type { Repositories } from "../repositories/interfaces/index.js";
 import { requireAuth, type AuthenticatedRequest } from "../middleware/auth.js";
+import { param } from "../middleware/params.js";
 import { createSubscriptionBody } from "../validation/schemas.js";
 import { canReadList } from "../domain/moron-list.js";
 
@@ -73,7 +74,8 @@ export function createSubscriptionRoutes(repos: Repositories): Router {
   // DELETE /api/subscriptions/:platform/:slug
   router.delete("/:platform/:slug", requireAuth, (req: Request, res: Response) => {
     try {
-      const { platform, slug } = req.params;
+      const platform = param(req, "platform");
+      const slug = param(req, "slug");
       if (platform === undefined || slug === undefined) {
         res.status(400).json({ error: "Platform and slug are required" });
         return;

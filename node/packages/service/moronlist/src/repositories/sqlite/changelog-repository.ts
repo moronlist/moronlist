@@ -37,7 +37,7 @@ function findByList(
             user_id: c.user_id,
             created_at: c.created_at,
           }))
-          .orderBy((c) => c.version, "asc")
+          .orderBy((c) => c.version)
           .take(p.limit),
       { platform, slug, sinceVersion, limit }
     );
@@ -62,7 +62,7 @@ function findByList(
           user_id: c.user_id,
           created_at: c.created_at,
         }))
-        .orderBy((c) => c.version, "asc")
+        .orderBy((c) => c.version)
         .take(p.limit),
     { platform, slug, limit }
   );
