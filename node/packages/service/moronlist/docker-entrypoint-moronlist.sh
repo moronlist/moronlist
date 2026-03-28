@@ -11,5 +11,5 @@ cd /app/node/packages/service/moronlist
 # To run migrations, use: npm run migrate:latest (on the host with proper env vars)
 
 # Start the server
-echo "Starting server on port ${MORONLIST_SERVER_PORT:-4000}..."
+echo "Starting server on port ${MORONLIST_SERVER_PORT:-6000}..."
 exec node dist/bin/server.js

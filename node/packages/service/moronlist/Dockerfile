@@ -79,7 +79,7 @@ COPY --from=builder /app/tsconfig.base.json ./
 # Create data directory
 RUN mkdir -p /app/data
 
-EXPOSE 4000
+EXPOSE 6000
 
 CMD ["npm", "run", "dev"]
 
@@ -114,13 +114,13 @@ RUN chmod +x docker-entrypoint.sh
 # Create data directories
 RUN mkdir -p /app/data /app/logs
 
-EXPOSE 4000
+EXPOSE 6000
 
 ENV NODE_ENV=production \
-    MORONLIST_SERVER_PORT=4000 \
+    MORONLIST_SERVER_PORT=6000 \
     LOG_LEVEL=info
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
-    CMD node -e "require('http').get('http://localhost:' + (process.env.MORONLIST_SERVER_PORT || 4000) + '/health', (res) => process.exit(res.statusCode === 200 ? 0 : 1))"
+    CMD node -e "require('http').get('http://localhost:' + (process.env.MORONLIST_SERVER_PORT || 6000) + '/health', (res) => process.exit(res.statusCode === 200 ? 0 : 1))"
 
 ENTRYPOINT ["./docker-entrypoint.sh"]

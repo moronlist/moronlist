@@ -17,7 +17,7 @@ else
 fi
 
 # Check if Persona is running (start via Docker Compose if not)
-PERSONA_PORT="${PERSONA_SERVER_PORT:-4005}"
+PERSONA_PORT="${PERSONA_SERVER_PORT:-6005}"
 NEED_DOCKER_UP=false
 
 if ! curl -s "http://localhost:$PERSONA_PORT/health" > /dev/null 2>&1; then
@@ -118,7 +118,7 @@ MORONLIST_SERVER_PID=$!
 PIDS+=($MORONLIST_SERVER_PID)
 echo "MoronList server starting with PID $MORONLIST_SERVER_PID"
 
-if ! wait_for_server "${MORONLIST_SERVER_PORT:-4000}" "MoronList server"; then
+if ! wait_for_server "${MORONLIST_SERVER_PORT:-6000}" "MoronList server"; then
   kill "${PIDS[@]}" 2>/dev/null || true
   exit 1
 fi

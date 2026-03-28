@@ -21,9 +21,9 @@ fi
 echo "Stopping local Node.js processes..."
 pkill -f "node.*moronlist" 2>/dev/null || true
 
-# Free up common ports (MoronList: 4000, Persona: 4005, UI: 3000)
-echo "Freeing ports 3000, 4000, 4005..."
-for port in 3000 4000 4005; do
+# Free up common ports (MoronList: 6000, Persona: 6005, UI: 3000)
+echo "Freeing ports 3000, 6000, 6005..."
+for port in 3000 6000 6005; do
   lsof -ti:$port 2>/dev/null | xargs kill -9 2>/dev/null || true
 done
 
