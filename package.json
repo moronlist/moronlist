@@ -1,0 +1,35 @@
+{
+  "name": "moronlist",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "MoronList - Collaborative block lists for social platforms",
+  "scripts": {
+    "postinstall": "./scripts/setup-hooks.sh",
+    "dev": "./dev.sh",
+    "test": "./scripts/test.sh"
+  },
+  "workspaces": [
+    "node/packages/service/*",
+    "node/packages/ui/*",
+    "node/packages/plugin/*",
+    "node/packages/lib/*"
+  ],
+  "devDependencies": {
+    "@eslint/js": "^9.17.0",
+    "@types/node": "^22.10.2",
+    "concurrently": "^9.1.2",
+    "eslint": "^9.17.0",
+    "globals": "^15.15.0",
+    "knex": "^3.1.0",
+    "prettier": "^3.4.2",
+    "sqlite3": "^5.1.7",
+    "tsx": "^4.19.2",
+    "typescript": "^5.9.2",
+    "typescript-eslint": "^8.51.0",
+    "uuid": "^11.0.5"
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  }
+}

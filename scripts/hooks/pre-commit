@@ -1,0 +1,18 @@
+#!/bin/sh
+#
+# Pre-commit hook to prevent commits directly to main branch
+#
+
+branch="$(git rev-parse --abbrev-ref HEAD)"
+
+if [ "$branch" = "main" ]; then
+  echo "ERROR: Direct commits to 'main' branch are not allowed."
+  echo ""
+  echo "Please create a feature branch first:"
+  echo "  git checkout -b feature/your-feature-name"
+  echo ""
+  echo "Then commit your changes and create a pull request."
+  exit 1
+fi
+
+exit 0

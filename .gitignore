@@ -137,3 +137,18 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# Data directories
+data/
+
+# Test data
+.tests/
+.analysis/
+.temp/
+
+# Build output
+**/dist/
+**/generated/
+
+# Chrome extension build
+**/chrome/dist/
