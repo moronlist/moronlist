@@ -91,8 +91,10 @@ export function createAuthRoutes(repos: Repositories, personaClient: PersonaClie
   // GET /auth/login
   // Redirects the browser to Persona's Google OAuth flow.
   // After OAuth completes, Persona redirects back to /auth/callback.
-  router.get("/login", (_req: Request, res: Response) => {
-    const callbackUrl = `${config.server.publicUrl}/auth/callback`;
+  router.get("/login", (req: Request, res: Response) => {
+    const protocol = config.isProduction ? "https" : req.protocol;
+    const host = req.get("host") ?? `${config.server.host}:${String(config.server.port)}`;
+    const callbackUrl = `${protocol}://${host}/auth/callback`;
     const personaOAuthUrl = `${config.persona.serviceUrl}/auth/google?redirect=${encodeURIComponent(callbackUrl)}`;
     res.redirect(personaOAuthUrl);
   });
