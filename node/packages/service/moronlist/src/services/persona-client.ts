@@ -62,7 +62,7 @@ export function createPersonaClient(config: PersonaClientConfig): PersonaClient 
         method,
         headers: {
           "Content-Type": "application/json",
-          "X-Internal-Secret": internalSecret,
+          Authorization: `Bearer ${internalSecret}`,
         },
         ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
       });
