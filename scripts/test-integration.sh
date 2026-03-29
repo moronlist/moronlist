@@ -94,6 +94,7 @@ PERSONA_INTERNAL_SECRET=test-internal-secret-for-integration-tests
 # Persona server config
 PERSONA_GOOGLE_CLIENT_ID=test-google-client-id
 PERSONA_GOOGLE_CLIENT_SECRET=test-google-client-secret
+PERSONA_GOOGLE_REDIRECT_URI=http://localhost:6005/auth/google/callback
 
 # Service URLs
 MORONLIST_PUBLIC_URL=http://localhost:6000
@@ -120,6 +121,9 @@ EOF
     COMPOSE_CMD="docker compose -f production/docker-compose.yml"
 
     # Run migrations
+    echo "Running Persona migrations..."
+    $COMPOSE_CMD run --rm persona-migrations
+
     echo "Running MoronList migrations..."
     $COMPOSE_CMD run --rm moronlist-migrations
 

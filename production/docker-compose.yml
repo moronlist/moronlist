@@ -38,6 +38,9 @@ services:
       - "127.0.0.1:6005:6005"
     env_file:
       - ${ENV_FILE:-.env}
+    depends_on:
+      persona-migrations:
+        condition: service_completed_successfully
     environment:
       # Container-specific paths and hosts (override values from env_file)
       - NODE_ENV=production
