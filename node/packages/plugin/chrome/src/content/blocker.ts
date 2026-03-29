@@ -1,13 +1,11 @@
 type BlockState = {
   blockedUsers: Set<string>;
   saintedUsers: Set<string>;
-  processedElements: WeakSet<Element>;
 };
 
 const state: BlockState = {
   blockedUsers: new Set(),
   saintedUsers: new Set(),
-  processedElements: new WeakSet(),
 };
 
 const MORONLIST_ATTR = "data-moronlist-processed";
@@ -15,26 +13,16 @@ const MORONLIST_BTN_ATTR = "data-moronlist-btn";
 
 const DEBOUNCE_MS = 100;
 
-function flattenUserSet(users: Record<string, string[]>): Set<string> {
-  const flat = new Set<string>();
-  for (const list of Object.values(users)) {
-    for (const userId of list) {
-      flat.add(userId.toLowerCase());
-    }
-  }
-  return flat;
-}
-
 async function loadBlockedSets(): Promise<void> {
   try {
     const response = (await chrome.runtime.sendMessage({
       type: "GET_BLOCKED_SET",
     })) as {
-      blocked: Record<string, string[]>;
-      sainted: Record<string, string[]>;
+      blocked: string[];
+      sainted: string[];
     };
-    state.blockedUsers = flattenUserSet(response.blocked);
-    state.saintedUsers = flattenUserSet(response.sainted);
+    state.blockedUsers = new Set(response.blocked.map((u) => u.toLowerCase()));
+    state.saintedUsers = new Set(response.sainted.map((u) => u.toLowerCase()));
   } catch {
     // Extension context may be invalidated
   }
@@ -50,7 +38,7 @@ function isBlocked(username: string): boolean {
 
 function extractUsernameFromTweet(tweetElement: Element): string | null {
   // Primary: UserAvatar-Container-{username} data-testid attribute
-  // This is the most reliable selector — X puts the username directly in the attribute
+  // This is the most reliable selector -- X puts the username directly in the attribute
   const avatarContainers = tweetElement.querySelectorAll('[data-testid^="UserAvatar-Container-"]');
   if (avatarContainers.length > 0) {
     // First avatar is the tweet author (subsequent ones may be quoted tweets)
@@ -164,9 +152,7 @@ function createAddButton(username: string): HTMLElement {
     e.preventDefault();
     e.stopPropagation();
     chrome.runtime.sendMessage({
-      type: "ADD_ENTRY",
-      platform: "twitter",
-      slug: "",
+      type: "OPEN_QUICK_ADD",
       platformUserId: username,
     });
   });
@@ -175,7 +161,7 @@ function createAddButton(username: string): HTMLElement {
 }
 
 function processTweet(tweetElement: Element): void {
-  // Already processed — re-evaluate block status on reprocess
+  // Already processed -- re-evaluate block status on reprocess
   const currentAttr = tweetElement.getAttribute(MORONLIST_ATTR);
   if (currentAttr === "ok" || currentAttr === "blocked") {
     const username = tweetElement.getAttribute("data-moronlist-username");
@@ -191,7 +177,7 @@ function processTweet(tweetElement: Element): void {
 
   const username = extractUsernameFromTweet(tweetElement);
   if (username === null) {
-    // Can't determine user — show the tweet anyway
+    // Can't determine user -- show the tweet anyway
     markVisible(tweetElement);
     return;
   }
@@ -322,10 +308,6 @@ chrome.runtime.onMessage.addListener(
         sendResponse({ ok: true });
       });
       return true;
-    }
-    if (message.type === "SHOW_ADD_DIALOG") {
-      sendResponse({ ok: true });
-      return false;
     }
     return false;
   }

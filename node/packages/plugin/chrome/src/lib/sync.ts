@@ -1,143 +1,153 @@
-import { sync, fetchMySubscriptions, fetchMe } from "./api-client.js";
-import type { SyncDelta } from "./api-client.js";
+import { fetchMySubscriptions, fetchMyLists, fetchMeta, fetchTxtFile } from "./api-client.js";
 import {
   getSyncState,
   setSyncState,
-  getBlockedUsers,
   setBlockedUsers,
-  getSaintedUsers,
   setSaintedUsers,
   setLastSyncTime,
   setMyLists,
 } from "./storage.js";
-import type { BlockedUsers, SaintedUsers, OwnedList } from "./storage.js";
+import type { OwnedList } from "./storage.js";
 
 const SYNC_ALARM_NAME = "moronlist-sync";
 const SYNC_INTERVAL_MINUTES = 5;
 
 export type SyncResult =
-  | { success: true; deltasApplied: number }
+  | { success: true; listsUpdated: number }
   | { success: false; error: string };
 
-function applyDelta(
-  blocked: BlockedUsers,
-  sainted: SaintedUsers,
-  delta: SyncDelta
-): { blocked: BlockedUsers; sainted: SaintedUsers } {
-  const listKey = `${delta.platform}/${delta.slug}`;
+// Parse txt file lines into blocked and sainted sets.
+// Line format: first char is op (+/-/*/~), rest is username (optionally followed by space + reason).
+// + = add to blocked
+// - = remove from blocked
+// * = add to sainted
+// ~ = remove from sainted
+export function replayTxtFiles(lines: string[]): { blocked: Set<string>; sainted: Set<string> } {
+  const blocked = new Set<string>();
+  const sainted = new Set<string>();
 
-  const currentBlocked = new Set(blocked[listKey] ?? []);
-  const currentSainted = new Set(sainted[listKey] ?? []);
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed.length < 2) {
+      continue;
+    }
 
-  if (delta.snapshot) {
-    currentBlocked.clear();
-    currentSainted.clear();
+    const op = trimmed[0];
+    const rest = trimmed.slice(1).trim();
+    // Username is the first token (before any space/reason)
+    const spaceIdx = rest.indexOf(" ");
+    const username = spaceIdx === -1 ? rest : rest.slice(0, spaceIdx);
+
+    if (username.length === 0) {
+      continue;
+    }
+
+    switch (op) {
+      case "+":
+        blocked.add(username);
+        break;
+      case "-":
+        blocked.delete(username);
+        break;
+      case "*":
+        sainted.add(username);
+        break;
+      case "~":
+        sainted.delete(username);
+        break;
+      default:
+        // Unknown op, skip
+        break;
+    }
   }
 
-  for (const entry of delta.entries.added) {
-    currentBlocked.add(entry.platformUserId);
-  }
-  for (const userId of delta.entries.removed) {
-    currentBlocked.delete(userId);
-  }
-
-  for (const saint of delta.saints.added) {
-    currentSainted.add(saint.platformUserId);
-  }
-  for (const userId of delta.saints.removed) {
-    currentSainted.delete(userId);
-  }
-
-  return {
-    blocked: { ...blocked, [listKey]: Array.from(currentBlocked) },
-    sainted: { ...sainted, [listKey]: Array.from(currentSainted) },
-  };
+  return { blocked, sainted };
 }
 
 export async function performSync(): Promise<SyncResult> {
-  const syncState = await getSyncState();
-
-  const syncResult = await sync(syncState.lists);
-  if (!syncResult.success) {
-    return { success: false, error: syncResult.error };
-  }
-
-  let blocked = await getBlockedUsers();
-  let sainted = await getSaintedUsers();
-  const newListVersions = { ...syncState.lists };
-  const newListsToTrack: Record<string, number> = {};
-
-  for (const delta of syncResult.data.deltas) {
-    const applied = applyDelta(blocked, sainted, delta);
-    blocked = applied.blocked;
-    sainted = applied.sainted;
-    newListVersions[delta.listId] = delta.version;
-
-    for (const inherited of delta.inherits) {
-      const inheritKey = `${inherited.platform}/${inherited.slug}`;
-      const alreadyTracked = Object.entries(newListVersions).some(([, _version]) => {
-        return (
-          Object.keys(blocked).includes(inheritKey) || Object.keys(sainted).includes(inheritKey)
-        );
-      });
-      if (!alreadyTracked) {
-        newListsToTrack[inheritKey] = 0;
-      }
-    }
-  }
-
-  await setBlockedUsers(blocked);
-  await setSaintedUsers(sainted);
-  await setSyncState({ lists: { ...newListVersions, ...newListsToTrack } });
-  await setLastSyncTime(Date.now());
-
-  return { success: true, deltasApplied: syncResult.data.deltas.length };
-}
-
-export async function refreshSubscriptions(): Promise<void> {
   const subsResult = await fetchMySubscriptions();
   if (!subsResult.success) {
-    return;
+    return { success: false, error: subsResult.error };
   }
 
   const syncState = await getSyncState();
-  const updatedLists = { ...syncState.lists };
+  const newSyncState: Record<string, { version: number; fileCount: number }> = {};
+  let listsUpdated = 0;
+
+  // Collect all txt file lines across all subscribed lists
+  const allLines: string[] = [];
 
   for (const sub of subsResult.data) {
-    if (updatedLists[sub.moronListId] === undefined) {
-      updatedLists[sub.moronListId] = 0;
+    const listKey = `${sub.platform}/${sub.slug}`;
+
+    // Fetch meta.json from CDN
+    const metaResult = await fetchMeta(sub.platform, sub.slug);
+    if (!metaResult.success) {
+      // Keep old sync state for this list if meta fetch fails
+      const existing = syncState[listKey];
+      if (existing !== undefined) {
+        newSyncState[listKey] = existing;
+      }
+      continue;
     }
+
+    const meta = metaResult.data;
+    const localState = syncState[listKey];
+
+    // Check if we need to download files
+    const needsUpdate =
+      localState === undefined ||
+      localState.version !== meta.version ||
+      localState.fileCount !== meta.fileCount;
+
+    if (needsUpdate) {
+      listsUpdated++;
+    }
+
+    // Download all txt files (we always need them all to replay)
+    for (let i = 0; i < meta.fileCount; i++) {
+      const txtResult = await fetchTxtFile(sub.platform, sub.slug, i);
+      if (txtResult.success) {
+        allLines.push(...txtResult.data.split("\n"));
+      }
+    }
+
+    newSyncState[listKey] = {
+      version: meta.version,
+      fileCount: meta.fileCount,
+    };
   }
 
-  const subscribedIds = new Set(subsResult.data.map((s) => s.moronListId));
-  for (const listId of Object.keys(updatedLists)) {
-    if (!subscribedIds.has(listId)) {
-      delete updatedLists[listId];
-    }
-  }
+  // Replay all lines to build the effective blocked/sainted sets
+  const { blocked, sainted } = replayTxtFiles(allLines);
 
-  await setSyncState({ lists: updatedLists });
+  await setBlockedUsers(Array.from(blocked));
+  await setSaintedUsers(Array.from(sainted));
+  await setSyncState(newSyncState);
+  await setLastSyncTime(Date.now());
+
+  return { success: true, listsUpdated };
 }
 
 export async function refreshMyLists(): Promise<void> {
-  const meResult = await fetchMe();
-  if (!meResult.success) {
+  const listsResult = await fetchMyLists();
+  if (!listsResult.success) {
     return;
   }
 
-  const subsResult = await fetchMySubscriptions();
-  if (!subsResult.success) {
-    return;
-  }
-
-  const ownedLists: OwnedList[] = subsResult.data.map((sub) => ({
-    id: sub.moronListId,
-    platform: sub.platform,
-    slug: sub.slug,
-    name: sub.name,
+  const ownedLists: OwnedList[] = listsResult.data.map((list) => ({
+    id: list.id,
+    platform: list.platform,
+    slug: list.slug,
+    name: list.name,
   }));
 
   await setMyLists(ownedLists);
+}
+
+export async function performFullSync(): Promise<SyncResult> {
+  await refreshMyLists();
+  return performSync();
 }
 
 export async function scheduleSync(): Promise<void> {
@@ -153,10 +163,4 @@ export async function cancelSync(): Promise<void> {
 
 export function isSyncAlarm(alarmName: string): boolean {
   return alarmName === SYNC_ALARM_NAME;
-}
-
-export async function performFullSync(): Promise<SyncResult> {
-  await refreshSubscriptions();
-  await refreshMyLists();
-  return performSync();
 }
