@@ -15,9 +15,7 @@ type StorageSchema = {
   user: { id: string; name: string; email: string } | null;
   // Per-list sync state: version and file count
   syncState: Record<string, { version: number; fileCount: number }>;
-  // Computed blocked/sainted sets (serialized as string[])
-  blockedUsers: string[];
-  saintedUsers: string[];
+  // Blocked/sainted sets are in IndexedDB (see blocked-db.ts), not here
   lastSyncTime: number | null;
   myLists: OwnedList[];
   lastSelectedListIds: string[];
@@ -81,22 +79,6 @@ export async function getSyncState(): Promise<StorageSchema["syncState"]> {
 
 export async function setSyncState(state: StorageSchema["syncState"]): Promise<void> {
   return setItem("syncState", state);
-}
-
-export async function getBlockedUsers(): Promise<string[]> {
-  return getItem("blockedUsers", []);
-}
-
-export async function setBlockedUsers(users: string[]): Promise<void> {
-  return setItem("blockedUsers", users);
-}
-
-export async function getSaintedUsers(): Promise<string[]> {
-  return getItem("saintedUsers", []);
-}
-
-export async function setSaintedUsers(users: string[]): Promise<void> {
-  return setItem("saintedUsers", users);
 }
 
 export async function getLastSyncTime(): Promise<number | null> {
