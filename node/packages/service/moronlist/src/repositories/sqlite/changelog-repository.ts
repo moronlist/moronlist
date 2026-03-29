@@ -160,6 +160,20 @@ function findUnflushed(db: SQLiteDatabase, platform: string, slug: string): Chan
   return rows.map(mapChangelogFromDb);
 }
 
+function findListsWithUnflushed(db: SQLiteDatabase): { platform: string; slug: string }[] {
+  // Raw SQL exception: Tinqer does not support IS NULL in WHERE with DISTINCT
+  const rows = db
+    .prepare(
+      `SELECT DISTINCT list_platform, list_slug
+       FROM changelog
+       WHERE flush_version IS NULL
+       ORDER BY list_platform, list_slug`
+    )
+    .all() as { list_platform: string; list_slug: string }[];
+
+  return rows.map((row) => ({ platform: row.list_platform, slug: row.list_slug }));
+}
+
 function markFlushed(
   db: SQLiteDatabase,
   platform: string,
@@ -236,6 +250,7 @@ export function createChangelogRepository(db: SQLiteDatabase): IChangelogReposit
     findByList: (platform, slug, sinceVersion, limit) =>
       findByList(db, platform, slug, sinceVersion, limit),
     findUnflushed: (platform, slug) => findUnflushed(db, platform, slug),
+    findListsWithUnflushed: () => findListsWithUnflushed(db),
     findLatestActionForUser: (platform, slug, platformUserId) =>
       findLatestActionForUser(db, platform, slug, platformUserId),
     create: (data) => createEntry(db, data),

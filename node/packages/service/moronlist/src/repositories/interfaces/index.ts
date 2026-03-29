@@ -55,6 +55,7 @@ export type UpdateMoronListData = {
 export type IMoronListRepository = {
   findByPlatformAndSlug(platform: string, slug: string): MoronList | null;
   findByOwnerId(ownerId: string): MoronList[];
+  findAllPublic(): MoronList[];
   create(data: CreateMoronListData): MoronList;
   update(platform: string, slug: string, data: UpdateMoronListData): MoronList;
   incrementVersion(platform: string, slug: string): number;
@@ -93,6 +94,7 @@ export type IChangelogRepository = {
     limit: number
   ): ChangelogEntry[];
   findUnflushed(platform: string, slug: string): ChangelogEntry[];
+  findListsWithUnflushed(): { platform: string; slug: string }[];
   findLatestActionForUser(
     platform: string,
     slug: string,

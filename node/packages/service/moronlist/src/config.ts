@@ -68,6 +68,12 @@ export const config = {
     serviceUrl: required("PERSONA_URL"),
     internalSecret: required("PERSONA_INTERNAL_SECRET"),
   },
+
+  // Output directories for static file generation
+  output: {
+    dataDir: optional("DATA_OUTPUT_DIR", "./output/data"),
+    siteDir: optional("SITE_OUTPUT_DIR", "./output/site"),
+  },
 };
 
 export type Config = typeof config;

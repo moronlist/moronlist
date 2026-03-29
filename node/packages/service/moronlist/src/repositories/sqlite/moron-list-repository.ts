@@ -85,6 +85,35 @@ function findByOwnerId(db: SQLiteDatabase, ownerId: string): MoronList[] {
   return rows.map(mapMoronListFromDb);
 }
 
+function findAllPublic(db: SQLiteDatabase): MoronList[] {
+  const rows = executeSelect(
+    db,
+    schema,
+    (q, p) =>
+      q
+        .from("moron_list")
+        .where((l) => l.visibility === p.visibility)
+        .select((l) => ({
+          platform: l.platform,
+          slug: l.slug,
+          owner_id: l.owner_id,
+          name: l.name,
+          description: l.description,
+          visibility: l.visibility,
+          version: l.version,
+          entry_count: l.entry_count,
+          saint_count: l.saint_count,
+          forked_from_platform: l.forked_from_platform,
+          forked_from_slug: l.forked_from_slug,
+          created_at: l.created_at,
+          updated_at: l.updated_at,
+        })),
+    { visibility: "public" }
+  );
+
+  return rows.map(mapMoronListFromDb);
+}
+
 function create(db: SQLiteDatabase, data: CreateMoronListData): MoronList {
   const now = new Date().toISOString();
 
@@ -229,6 +258,7 @@ export function createMoronListRepository(db: SQLiteDatabase): IMoronListReposit
   return {
     findByPlatformAndSlug: (platform, slug) => findByPlatformAndSlug(db, platform, slug),
     findByOwnerId: (ownerId) => findByOwnerId(db, ownerId),
+    findAllPublic: () => findAllPublic(db),
     create: (data) => create(db, data),
     update: (platform, slug, data) => update(db, platform, slug, data),
     incrementVersion: (platform, slug) => incrementVersion(db, platform, slug),
