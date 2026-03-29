@@ -32,29 +32,6 @@ export type DatabaseSchema = {
     updated_at: string;
   };
 
-  // Moron entry table - users on the block list
-  moron_entry: {
-    id: string; // UUID
-    list_platform: string;
-    list_slug: string;
-    platform_user_id: string;
-    display_name: string | null;
-    reason: string | null;
-    added_by_id: string; // FK to user.id
-    created_at: string;
-  };
-
-  // Saint entry table - users on the allow list
-  saint_entry: {
-    id: string; // UUID
-    list_platform: string;
-    list_slug: string;
-    platform_user_id: string;
-    reason: string | null;
-    added_by_id: string; // FK to user.id
-    created_at: string;
-  };
-
   // Moron list inheritance table - list parent/child relationships
   moron_list_inheritance: {
     child_platform: string;

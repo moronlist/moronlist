@@ -25,8 +25,6 @@ export { schema } from "./tinqer-types.js";
 export type {
   UserDbRow,
   MoronListDbRow,
-  MoronEntryDbRow,
-  SaintEntryDbRow,
   MoronListInheritanceDbRow,
   ChangelogDbRow,
   FlushStateDbRow,

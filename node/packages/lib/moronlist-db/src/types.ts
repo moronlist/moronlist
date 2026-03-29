@@ -34,29 +34,6 @@ export type MoronListDbRow = {
   updated_at: string;
 };
 
-// Moron entry table row
-export type MoronEntryDbRow = {
-  id: string; // UUID
-  list_platform: string;
-  list_slug: string;
-  platform_user_id: string;
-  display_name: string | null;
-  reason: string | null;
-  added_by_id: string; // FK to user.id
-  created_at: string;
-};
-
-// Saint entry table row
-export type SaintEntryDbRow = {
-  id: string; // UUID
-  list_platform: string;
-  list_slug: string;
-  platform_user_id: string;
-  reason: string | null;
-  added_by_id: string; // FK to user.id
-  created_at: string;
-};
-
 // Moron list inheritance table row
 export type MoronListInheritanceDbRow = {
   child_platform: string;
