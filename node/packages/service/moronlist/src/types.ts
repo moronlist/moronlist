@@ -2,13 +2,7 @@
  * Core domain types for MoronList
  */
 
-import type {
-  UserDbRow,
-  MoronListDbRow,
-  ChangelogDbRow,
-  FlushStateDbRow,
-  SubscriptionDbRow,
-} from "moronlist-db";
+import type { UserDbRow, MoronListDbRow, ChangelogDbRow, SubscriptionDbRow } from "moronlist-db";
 
 // Result type for error handling
 export type DomainError = {
@@ -100,15 +94,7 @@ export type ChangelogEntry = {
   platformUserId: string;
   userId: string;
   reason: string | null;
-  flushVersion: number | null;
   createdAt: Date;
-};
-
-export type FlushState = {
-  listPlatform: string;
-  listSlug: string;
-  lastFlushedVersion: number;
-  lastFlushedAt: Date | null;
 };
 
 export type Subscription = {
@@ -169,17 +155,7 @@ export function mapChangelogFromDb(row: ChangelogDbRow): ChangelogEntry {
     platformUserId: row.platform_user_id,
     userId: row.user_id,
     reason: row.reason,
-    flushVersion: row.flush_version,
     createdAt: new Date(row.created_at),
-  };
-}
-
-export function mapFlushStateFromDb(row: FlushStateDbRow): FlushState {
-  return {
-    listPlatform: row.list_platform,
-    listSlug: row.list_slug,
-    lastFlushedVersion: row.last_flushed_version,
-    lastFlushedAt: row.last_flushed_at !== null ? new Date(row.last_flushed_at) : null,
   };
 }
 

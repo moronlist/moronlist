@@ -234,8 +234,13 @@ describe("Cron: flush-data", () => {
     const result1 = flushData(repos, testOutputDir);
     expect(result1.flushed).to.be.greaterThan(0);
 
-    // Second flush -- nothing new
-    const result2 = flushData(repos, testOutputDir);
-    expect(result2.flushed).to.equal(0);
+    const txtPath = join(testOutputDir, "x", "reflush-test", "1.txt");
+    const contentAfterFirst = readFileSync(txtPath, "utf-8");
+
+    // Second flush -- no new DB entries, so file content should not change
+    flushData(repos, testOutputDir);
+
+    const contentAfterSecond = readFileSync(txtPath, "utf-8");
+    expect(contentAfterSecond).to.equal(contentAfterFirst);
   });
 });

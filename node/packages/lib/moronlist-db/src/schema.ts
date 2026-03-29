@@ -51,16 +51,7 @@ export type DatabaseSchema = {
     platform_user_id: string;
     user_id: string; // FK to user.id
     reason: string | null;
-    flush_version: number | null;
     created_at: string;
-  };
-
-  // Flush state table - tracks flush progress per list
-  flush_state: {
-    list_platform: string;
-    list_slug: string;
-    last_flushed_version: number;
-    last_flushed_at: string | null;
   };
 
   // Subscription table - users subscribing to lists

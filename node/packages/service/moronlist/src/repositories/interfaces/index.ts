@@ -10,7 +10,6 @@ import type {
   Visibility,
   ChangelogEntry,
   ChangelogAction,
-  FlushState,
   Subscription,
   InheritanceLink,
 } from "../../types.js";
@@ -93,8 +92,6 @@ export type IChangelogRepository = {
     sinceVersion: number | undefined,
     limit: number
   ): ChangelogEntry[];
-  findUnflushed(platform: string, slug: string): ChangelogEntry[];
-  findListsWithUnflushed(): { platform: string; slug: string }[];
   findLatestActionForUser(
     platform: string,
     slug: string,
@@ -102,14 +99,7 @@ export type IChangelogRepository = {
   ): ChangelogEntry | null;
   create(data: CreateChangelogData): ChangelogEntry;
   createBatch(entries: CreateChangelogData[]): ChangelogEntry[];
-  markFlushed(platform: string, slug: string, upToVersion: number): void;
   deleteAllByList(platform: string, slug: string): number;
-};
-
-// Flush State Repository
-export type IFlushStateRepository = {
-  getState(platform: string, slug: string): FlushState | null;
-  updateState(platform: string, slug: string, version: number): void;
 };
 
 // Subscription Repository
@@ -129,6 +119,5 @@ export type Repositories = {
   moronList: IMoronListRepository;
   inheritance: IInheritanceRepository;
   changelog: IChangelogRepository;
-  flushState: IFlushStateRepository;
   subscription: ISubscriptionRepository;
 };
