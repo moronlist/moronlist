@@ -13,12 +13,11 @@ import type { ParentNode } from "./api-client.js";
 import {
   getSyncState,
   setSyncState,
-  setBlockedUsers,
-  setSaintedUsers,
   setLastSyncTime,
   setMyLists,
   type OwnedList,
 } from "./storage.js";
+import { replaceBlocked, replaceSainted } from "./blocked-db.js";
 
 const SYNC_ALARM_NAME = "moronlist-sync";
 const SYNC_INTERVAL_MINUTES = 20;
@@ -199,8 +198,8 @@ export async function performSync(): Promise<SyncResult> {
 
   const { blocked, sainted } = replayLines(allLines);
 
-  await setBlockedUsers(Array.from(blocked));
-  await setSaintedUsers(Array.from(sainted));
+  await replaceBlocked(Array.from(blocked));
+  await replaceSainted(Array.from(sainted));
   await setSyncState(newSyncState);
   await setLastSyncTime(Date.now());
 

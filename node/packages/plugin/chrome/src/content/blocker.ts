@@ -1,39 +1,33 @@
-type BlockState = {
-  blockedUsers: Set<string>;
-  saintedUsers: Set<string>;
-};
-
-const state: BlockState = {
-  blockedUsers: new Set(),
-  saintedUsers: new Set(),
-};
-
 const MORONLIST_ATTR = "data-moronlist-processed";
 const MORONLIST_BTN_ATTR = "data-moronlist-btn";
 
 const DEBOUNCE_MS = 250;
 
-async function loadBlockedSets(): Promise<void> {
-  try {
-    const response = (await chrome.runtime.sendMessage({
-      type: "GET_BLOCKED_SET",
-    })) as {
-      blocked: string[];
-      sainted: string[];
-    };
-    state.blockedUsers = new Set(response.blocked.map((u) => u.toLowerCase()));
-    state.saintedUsers = new Set(response.sainted.map((u) => u.toLowerCase()));
-  } catch {
-    // Extension context may be invalidated
-  }
+// Per-page-session cache: username → isBlocked
+// Avoids re-querying IndexedDB for the same username on scroll
+const userCache = new Map<string, boolean>();
+
+function clearUserCache(): void {
+  userCache.clear();
 }
 
-function isBlocked(username: string): boolean {
+async function isBlocked(username: string): Promise<boolean> {
   const lower = username.toLowerCase();
-  if (state.saintedUsers.has(lower)) {
+  const cached = userCache.get(lower);
+  if (cached !== undefined) return cached;
+
+  try {
+    const result = (await chrome.runtime.sendMessage({
+      type: "CHECK_USER",
+      platformUserId: lower,
+    })) as { blocked: boolean; sainted: boolean };
+    const blocked = result.blocked && !result.sainted;
+    userCache.set(lower, blocked);
+    return blocked;
+  } catch {
+    // Extension context may be invalidated
     return false;
   }
-  return state.blockedUsers.has(lower);
 }
 
 function extractUsernameFromTweet(tweetElement: Element): string | null {
@@ -176,13 +170,13 @@ function createActionBarButton(username: string): HTMLElement {
   return wrapper;
 }
 
-function processTweet(tweetElement: Element): void {
-  // Already processed -- re-evaluate block status on reprocess
+async function processTweet(tweetElement: Element): Promise<void> {
+  // Already processed — re-evaluate block status on reprocess
   const currentAttr = tweetElement.getAttribute(MORONLIST_ATTR);
   if (currentAttr === "ok" || currentAttr === "blocked") {
     const username = tweetElement.getAttribute("data-moronlist-username");
     if (username !== null && username.length > 0) {
-      if (isBlocked(username)) {
+      if (await isBlocked(username)) {
         markBlocked(tweetElement);
       } else {
         markProcessed(tweetElement);
@@ -193,21 +187,20 @@ function processTweet(tweetElement: Element): void {
 
   const username = extractUsernameFromTweet(tweetElement);
   if (username === null) {
-    // Can't determine user -- show the tweet anyway
     markProcessed(tweetElement);
     return;
   }
 
   tweetElement.setAttribute("data-moronlist-username", username);
 
-  if (isBlocked(username)) {
+  if (await isBlocked(username)) {
     markBlocked(tweetElement);
     return;
   }
 
   markProcessed(tweetElement);
 
-  // Add MoronList button to the action bar (reply, repost, like, etc.)
+  // Add MoronList button to the action bar
   const actionBar = tweetElement.querySelector('[role="group"]');
   if (actionBar !== null) {
     const existingBtn = actionBar.querySelector(`[${MORONLIST_BTN_ATTR}]`);
@@ -221,20 +214,23 @@ function processTweet(tweetElement: Element): void {
 function processTweets(): void {
   const tweets = document.querySelectorAll('article[data-testid="tweet"]');
   for (const tweet of tweets) {
-    processTweet(tweet);
+    void processTweet(tweet);
   }
 }
 
 function reprocessAllTweets(): void {
+  clearUserCache();
   const processed = document.querySelectorAll("[data-moronlist-username]");
   for (const el of processed) {
     const username = el.getAttribute("data-moronlist-username");
     if (username !== null && username.length > 0) {
-      if (isBlocked(username)) {
-        markBlocked(el);
-      } else {
-        markProcessed(el);
-      }
+      void isBlocked(username).then((blocked) => {
+        if (blocked) {
+          markBlocked(el);
+        } else {
+          markProcessed(el);
+        }
+      });
     }
   }
   processTweets();
@@ -324,23 +320,18 @@ chrome.runtime.onMessage.addListener(
     sendResponse: (response: unknown) => void
   ) => {
     if (message.type === "BLOCK_LIST_UPDATED") {
-      loadBlockedSets().then(() => {
-        reprocessAllTweets();
-        handleProfilePage();
-        sendResponse({ ok: true });
-      });
-      return true;
+      reprocessAllTweets();
+      handleProfilePage();
+      sendResponse({ ok: true });
+      return false;
     }
     return false;
   }
 );
 
 async function initialize(): Promise<void> {
-  // Load blocked sets with a timeout — don't let a hung service worker
-  // prevent tweets from showing. If it fails, all tweets show (nothing blocked).
-  const timeout = new Promise<void>((resolve) => setTimeout(resolve, 2000));
-  await Promise.race([loadBlockedSets(), timeout]);
-
+  // No bulk loading — each tweet queries the service worker individually
+  // via CHECK_USER, which does an IndexedDB lookup (O(1) per user)
   processTweets();
   handleProfilePage();
   setupMutationObserver();

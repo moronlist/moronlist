@@ -1,9 +1,5 @@
 import { scheduleSync, isSyncAlarm, performFullSync, performSync } from "../lib/sync.js";
 import {
-  getBlockedUsers,
-  setBlockedUsers,
-  getSaintedUsers,
-  setSaintedUsers,
   getLastSyncTime,
   getMyLists,
   getAuthToken,
@@ -13,6 +9,15 @@ import {
   getApiUrl,
   setPendingUsername,
 } from "../lib/storage.js";
+import {
+  checkUser as dbCheckUser,
+  addBlocked,
+  removeBlocked,
+  addSainted,
+  removeSainted,
+  getBlockedCount,
+  getSaintedCount,
+} from "../lib/blocked-db.js";
 import { addEntries, addSaints, removeEntries, removeSaints, fetchMe } from "../lib/api-client.js";
 
 export type MessageType =
@@ -23,6 +28,7 @@ export type MessageType =
   | { type: "ADD_SAINT"; platform: string; slug: string; platformUserId: string; reason?: string }
   | { type: "REMOVE_ENTRY"; platform: string; slug: string; platformUserId: string }
   | { type: "REMOVE_SAINT"; platform: string; slug: string; platformUserId: string }
+  | { type: "CHECK_USER"; platformUserId: string }
   | { type: "GET_STATUS" }
   | { type: "GET_BLOCKED_SET" }
   | { type: "OPEN_QUICK_ADD"; platformUserId: string }
@@ -201,14 +207,9 @@ async function handleMessage(message: MessageType): Promise<unknown> {
     }
 
     case "ADD_ENTRY": {
-      // Optimistic: add to local blocked set immediately
-      const blocked = await getBlockedUsers();
-      const lower = message.platformUserId.toLowerCase();
-      if (!blocked.includes(lower)) {
-        blocked.push(lower);
-        await setBlockedUsers(blocked);
-        notifyContentScriptsOfUpdate();
-      }
+      // Optimistic: add to IndexedDB immediately
+      await addBlocked([message.platformUserId]);
+      notifyContentScriptsOfUpdate();
       // Then send to server
       const result = await addEntries(message.platform, message.slug, [
         { platformUserId: message.platformUserId, reason: message.reason },
@@ -217,13 +218,8 @@ async function handleMessage(message: MessageType): Promise<unknown> {
     }
 
     case "ADD_SAINT": {
-      const sainted = await getSaintedUsers();
-      const sLower = message.platformUserId.toLowerCase();
-      if (!sainted.includes(sLower)) {
-        sainted.push(sLower);
-        await setSaintedUsers(sainted);
-        notifyContentScriptsOfUpdate();
-      }
+      await addSainted([message.platformUserId]);
+      notifyContentScriptsOfUpdate();
       const saintResult = await addSaints(message.platform, message.slug, [
         { platformUserId: message.platformUserId, reason: message.reason },
       ]);
@@ -231,10 +227,7 @@ async function handleMessage(message: MessageType): Promise<unknown> {
     }
 
     case "REMOVE_ENTRY": {
-      const blockedRm = await getBlockedUsers();
-      const rmLower = message.platformUserId.toLowerCase();
-      const filtered = blockedRm.filter((u) => u !== rmLower);
-      await setBlockedUsers(filtered);
+      await removeBlocked([message.platformUserId]);
       notifyContentScriptsOfUpdate();
       const rmResult = await removeEntries(message.platform, message.slug, [
         { platformUserId: message.platformUserId },
@@ -243,10 +236,7 @@ async function handleMessage(message: MessageType): Promise<unknown> {
     }
 
     case "REMOVE_SAINT": {
-      const saintedRm = await getSaintedUsers();
-      const srmLower = message.platformUserId.toLowerCase();
-      const sFiltered = saintedRm.filter((u) => u !== srmLower);
-      await setSaintedUsers(sFiltered);
+      await removeSainted([message.platformUserId]);
       notifyContentScriptsOfUpdate();
       const srmResult = await removeSaints(message.platform, message.slug, [
         { platformUserId: message.platformUserId },
@@ -255,24 +245,29 @@ async function handleMessage(message: MessageType): Promise<unknown> {
     }
 
     case "GET_STATUS": {
-      const blocked = await getBlockedUsers();
-      const sainted = await getSaintedUsers();
+      const blockedCount = await getBlockedCount();
+      const saintedCount = await getSaintedCount();
       const lastSyncTime = await getLastSyncTime();
       const myLists = await getMyLists();
       const user = await getUser();
       return {
         lastSyncTime,
-        blockedCount: blocked.length,
-        saintedCount: sainted.length,
+        blockedCount,
+        saintedCount,
         listCount: myLists.length,
         signedIn: user !== null,
       } satisfies StatusResponse;
     }
 
+    case "CHECK_USER": {
+      return dbCheckUser(message.platformUserId);
+    }
+
     case "GET_BLOCKED_SET": {
-      const blocked = await getBlockedUsers();
-      const sainted = await getSaintedUsers();
-      return { blocked, sainted };
+      // Legacy — content script now uses CHECK_USER per-username
+      const blockedN = await getBlockedCount();
+      const saintedN = await getSaintedCount();
+      return { blockedCount: blockedN, saintedCount: saintedN };
     }
 
     case "OPEN_QUICK_ADD": {
