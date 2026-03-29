@@ -4,7 +4,7 @@
 
 import { expect } from "chai";
 import request from "supertest";
-import { getApp, resetDatabase, createTestUser, createAuthToken } from "./setup.js";
+import { getApp, getRepos, resetDatabase, createTestUser, createAuthToken } from "./setup.js";
 
 describe("Moron list routes", () => {
   beforeEach(() => {
@@ -80,6 +80,57 @@ describe("Moron list routes", () => {
         .send({ platform: "x", slug: "nope", name: "Nope" })
         .expect(401);
     });
+
+    it("validates visibility enum (rejects bogus value)", async () => {
+      const { token } = createTestUser();
+
+      const res = await request(getApp())
+        .post("/api/morons")
+        .set("Authorization", `Bearer ${token}`)
+        .send({
+          platform: "x",
+          slug: "bad-vis",
+          name: "Bad Visibility",
+          visibility: "bogus",
+        })
+        .expect(400);
+
+      expect(res.body.error).to.equal("Validation error");
+    });
+
+    it("creates list with visibility unlisted", async () => {
+      const { token } = createTestUser();
+
+      const res = await request(getApp())
+        .post("/api/morons")
+        .set("Authorization", `Bearer ${token}`)
+        .send({
+          platform: "x",
+          slug: "unlisted-list",
+          name: "Unlisted List",
+          visibility: "unlisted",
+        })
+        .expect(201);
+
+      expect(res.body.list.visibility).to.equal("unlisted");
+    });
+
+    it("creates list with visibility private", async () => {
+      const { token } = createTestUser();
+
+      const res = await request(getApp())
+        .post("/api/morons")
+        .set("Authorization", `Bearer ${token}`)
+        .send({
+          platform: "x",
+          slug: "private-list",
+          name: "Private List",
+          visibility: "private",
+        })
+        .expect(201);
+
+      expect(res.body.list.visibility).to.equal("private");
+    });
   });
 
   // =========================================
@@ -134,6 +185,68 @@ describe("Moron list routes", () => {
         .send({ name: "Nope" })
         .expect(404);
     });
+
+    it("partial update (only name, description unchanged)", async () => {
+      const { token } = createTestUser();
+
+      await request(getApp())
+        .post("/api/morons")
+        .set("Authorization", `Bearer ${token}`)
+        .send({
+          platform: "x",
+          slug: "partial-upd",
+          name: "Original Name",
+          description: "Original Desc",
+        })
+        .expect(201);
+
+      const res = await request(getApp())
+        .put("/api/morons/x/partial-upd")
+        .set("Authorization", `Bearer ${token}`)
+        .send({ name: "New Name" })
+        .expect(200);
+
+      expect(res.body.list.name).to.equal("New Name");
+      expect(res.body.list.description).to.equal("Original Desc");
+    });
+
+    it("change visibility from public to private", async () => {
+      const { token } = createTestUser();
+
+      await request(getApp())
+        .post("/api/morons")
+        .set("Authorization", `Bearer ${token}`)
+        .send({
+          platform: "x",
+          slug: "vis-change",
+          name: "Vis Change",
+          visibility: "public",
+        })
+        .expect(201);
+
+      const res = await request(getApp())
+        .put("/api/morons/x/vis-change")
+        .set("Authorization", `Bearer ${token}`)
+        .send({ visibility: "private" })
+        .expect(200);
+
+      expect(res.body.list.visibility).to.equal("private");
+    });
+
+    it("returns 401 when unauthenticated", async () => {
+      const { token } = createTestUser();
+
+      await request(getApp())
+        .post("/api/morons")
+        .set("Authorization", `Bearer ${token}`)
+        .send({ platform: "x", slug: "noauth-upd", name: "No Auth" })
+        .expect(201);
+
+      await request(getApp())
+        .put("/api/morons/x/noauth-upd")
+        .send({ name: "Hijacked" })
+        .expect(401);
+    });
   });
 
   // =========================================
@@ -183,6 +296,85 @@ describe("Moron list routes", () => {
         .expect(403);
 
       expect(res.body.code).to.equal("FORBIDDEN");
+    });
+
+    it("cascading cleanup: subscriptions are deleted when list is deleted", async () => {
+      const { token: ownerToken } = createTestUser({ id: "cascadeowner" });
+      const { token: subToken } = createTestUser({ id: "cascadesub" });
+
+      // Create a list
+      await request(getApp())
+        .post("/api/morons")
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .send({ platform: "x", slug: "cascade-list", name: "Cascade" })
+        .expect(201);
+
+      // Subscribe to it
+      await request(getApp())
+        .post("/api/subscriptions")
+        .set("Authorization", `Bearer ${subToken}`)
+        .send({ moronListId: "x/cascade-list" })
+        .expect(201);
+
+      // Verify subscription exists
+      const subsBefore = await request(getApp())
+        .get("/api/me/subscriptions")
+        .set("Authorization", `Bearer ${subToken}`)
+        .expect(200);
+      expect(subsBefore.body.subscriptions).to.have.lengthOf(1);
+
+      // Delete the list
+      await request(getApp())
+        .delete("/api/morons/x/cascade-list")
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .expect(200);
+
+      // Verify subscription is gone
+      const subsAfter = await request(getApp())
+        .get("/api/me/subscriptions")
+        .set("Authorization", `Bearer ${subToken}`)
+        .expect(200);
+      expect(subsAfter.body.subscriptions).to.have.lengthOf(0);
+    });
+
+    it("cascading cleanup: changelog entries are deleted when list is deleted", async () => {
+      const { token: ownerToken } = createTestUser({ id: "casclogowner" });
+
+      // Create a list and add entries
+      await request(getApp())
+        .post("/api/morons")
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .send({ platform: "x", slug: "casclog-list", name: "Cascade Log" })
+        .expect(201);
+
+      await request(getApp())
+        .post("/api/morons/x/casclog-list/entries")
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .send([{ platformUserId: "user1" }, { platformUserId: "user2" }])
+        .expect(201);
+
+      // Delete the list
+      await request(getApp())
+        .delete("/api/morons/x/casclog-list")
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .expect(200);
+
+      // Re-create the list with the same slug and verify no old entries carry over
+      await request(getApp())
+        .post("/api/morons")
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .send({ platform: "x", slug: "casclog-list", name: "Cascade Log v2" })
+        .expect(201);
+
+      // Adding the same entries should succeed with added=2 (not skipped as duplicates)
+      const res = await request(getApp())
+        .post("/api/morons/x/casclog-list/entries")
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .send([{ platformUserId: "user1" }, { platformUserId: "user2" }])
+        .expect(201);
+
+      expect(res.body.added).to.equal(2);
+      expect(res.body.skipped).to.equal(0);
     });
   });
 
@@ -248,6 +440,67 @@ describe("Moron list routes", () => {
         .expect(404);
     });
 
+    it("forked list has entries and saints copied from source", async () => {
+      const { token } = createTestUser({ id: "forkcount_owner" });
+      const { token: forkerToken } = createTestUser({ id: "forkcount_forker" });
+
+      // Create source list
+      await request(getApp())
+        .post("/api/morons")
+        .set("Authorization", `Bearer ${token}`)
+        .send({ platform: "x", slug: "count-source", name: "Count Source" })
+        .expect(201);
+
+      // Add entries and saints
+      await request(getApp())
+        .post("/api/morons/x/count-source/entries")
+        .set("Authorization", `Bearer ${token}`)
+        .send([{ platformUserId: "m1" }, { platformUserId: "m2" }, { platformUserId: "m3" }])
+        .expect(201);
+
+      await request(getApp())
+        .post("/api/morons/x/count-source/saints")
+        .set("Authorization", `Bearer ${token}`)
+        .send([{ platformUserId: "s1" }])
+        .expect(201);
+
+      // Fork
+      await request(getApp())
+        .post("/api/morons/x/count-source/actions/fork")
+        .set("Authorization", `Bearer ${forkerToken}`)
+        .send({ slug: "count-fork" })
+        .expect(201);
+
+      // Check the forked list appears in my lists
+      const myListsRes = await request(getApp())
+        .get("/api/me/morons")
+        .set("Authorization", `Bearer ${forkerToken}`)
+        .expect(200);
+
+      const forked = myListsRes.body.lists.find((l: { slug: string }) => l.slug === "count-fork");
+      expect(forked).to.not.be.undefined;
+
+      // Verify entries were copied by removing them from the forked list
+      const removeEntries = await request(getApp())
+        .delete("/api/morons/x/count-fork/entries")
+        .set("Authorization", `Bearer ${forkerToken}`)
+        .send([{ platformUserId: "m1" }, { platformUserId: "m2" }, { platformUserId: "m3" }])
+        .expect(200);
+
+      expect(removeEntries.body.removed).to.equal(3);
+      expect(removeEntries.body.skipped).to.equal(0);
+
+      // Verify saints were copied by removing them from the forked list
+      const removeSaints = await request(getApp())
+        .delete("/api/morons/x/count-fork/saints")
+        .set("Authorization", `Bearer ${forkerToken}`)
+        .send([{ platformUserId: "s1" }])
+        .expect(200);
+
+      expect(removeSaints.body.removed).to.equal(1);
+      expect(removeSaints.body.skipped).to.equal(0);
+    });
+
     it("returns 409 when target slug already exists", async () => {
       const { token } = createTestUser({ id: "forkdup" });
 
@@ -268,6 +521,82 @@ describe("Moron list routes", () => {
         .set("Authorization", `Bearer ${token}`)
         .send({ slug: "taken-slug" })
         .expect(409);
+    });
+
+    it("cannot fork a private list", async () => {
+      const { token: ownerToken } = createTestUser({ id: "privforkowner" });
+      const { token: forkerToken } = createTestUser({ id: "privforker" });
+
+      // Create a private list
+      await request(getApp())
+        .post("/api/morons")
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .send({
+          platform: "x",
+          slug: "priv-source",
+          name: "Private Source",
+          visibility: "private",
+        })
+        .expect(201);
+
+      const res = await request(getApp())
+        .post("/api/morons/x/priv-source/actions/fork")
+        .set("Authorization", `Bearer ${forkerToken}`)
+        .send({ slug: "priv-fork" })
+        .expect(403);
+
+      expect(res.body.code).to.equal("FORBIDDEN");
+    });
+
+    it("fork copies parents from source list", async () => {
+      const { token } = createTestUser({ id: "forkparowner" });
+      const { token: forkerToken } = createTestUser({ id: "forkparforker" });
+
+      // Create parent lists
+      await request(getApp())
+        .post("/api/morons")
+        .set("Authorization", `Bearer ${token}`)
+        .send({ platform: "x", slug: "fp-parent-a", name: "Fork Parent A", visibility: "public" })
+        .expect(201);
+
+      await request(getApp())
+        .post("/api/morons")
+        .set("Authorization", `Bearer ${token}`)
+        .send({ platform: "x", slug: "fp-parent-b", name: "Fork Parent B", visibility: "public" })
+        .expect(201);
+
+      // Create source list with parents
+      await request(getApp())
+        .post("/api/morons")
+        .set("Authorization", `Bearer ${token}`)
+        .send({
+          platform: "x",
+          slug: "fp-source",
+          name: "Fork Parent Source",
+          visibility: "public",
+        })
+        .expect(201);
+
+      await request(getApp())
+        .put("/api/morons/x/fp-source/parents")
+        .set("Authorization", `Bearer ${token}`)
+        .send({ parents: ["x/fp-parent-a", "x/fp-parent-b"] })
+        .expect(200);
+
+      // Fork the source
+      await request(getApp())
+        .post("/api/morons/x/fp-source/actions/fork")
+        .set("Authorization", `Bearer ${forkerToken}`)
+        .send({ slug: "fp-forked" })
+        .expect(201);
+
+      // Verify the forked list inherited the parents via the repository
+      const repos = getRepos();
+      const forkedParents = repos.inheritance.findParents("x", "fp-forked");
+      expect(forkedParents).to.have.lengthOf(2);
+      const parentSlugs = forkedParents.map((p) => p.parentSlug);
+      expect(parentSlugs).to.include("fp-parent-a");
+      expect(parentSlugs).to.include("fp-parent-b");
     });
   });
 

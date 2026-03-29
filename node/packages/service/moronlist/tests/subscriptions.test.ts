@@ -86,6 +86,54 @@ describe("Subscription routes", () => {
 
       expect(res.body.error).to.equal("Validation error");
     });
+
+    it("cannot subscribe to a private list", async () => {
+      // Create a private list
+      await request(getApp())
+        .post("/api/morons")
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .send({
+          platform: "x",
+          slug: "priv-sub-list",
+          name: "Private Sub List",
+          visibility: "private",
+        })
+        .expect(201);
+
+      await request(getApp())
+        .post("/api/subscriptions")
+        .set("Authorization", `Bearer ${subscriberToken}`)
+        .send({ moronListId: "x/priv-sub-list" })
+        .expect(404);
+    });
+
+    it("subscribing to same list twice is idempotent", async () => {
+      // Subscribe once
+      const res1 = await request(getApp())
+        .post("/api/subscriptions")
+        .set("Authorization", `Bearer ${subscriberToken}`)
+        .send({ moronListId: "x/test-list" })
+        .expect(201);
+
+      expect(res1.body.subscription.listId).to.equal("x/test-list");
+
+      // Subscribe again
+      const res2 = await request(getApp())
+        .post("/api/subscriptions")
+        .set("Authorization", `Bearer ${subscriberToken}`)
+        .send({ moronListId: "x/test-list" })
+        .expect(201);
+
+      expect(res2.body.subscription.listId).to.equal("x/test-list");
+
+      // Verify only one subscription exists
+      const meSubs = await request(getApp())
+        .get("/api/me/subscriptions")
+        .set("Authorization", `Bearer ${subscriberToken}`)
+        .expect(200);
+
+      expect(meSubs.body.subscriptions).to.have.lengthOf(1);
+    });
   });
 
   // =========================================

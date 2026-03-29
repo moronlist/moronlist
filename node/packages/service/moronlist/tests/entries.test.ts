@@ -113,6 +113,76 @@ describe("Entry routes", () => {
         .send([{ platformUserId: "user4" }])
         .expect(404);
     });
+
+    it("rejects empty array body", async () => {
+      const res = await request(getApp())
+        .post("/api/morons/x/test-list/entries")
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .send([])
+        .expect(400);
+
+      expect(res.body.error).to.equal("Validation error");
+    });
+
+    it("validates platformUserId is required in each item", async () => {
+      const res = await request(getApp())
+        .post("/api/morons/x/test-list/entries")
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .send([{ reason: "no userId here" }])
+        .expect(400);
+
+      expect(res.body.error).to.equal("Validation error");
+    });
+
+    it("validates max 1000 items in batch", async () => {
+      const items = Array.from({ length: 1001 }, (_, i) => ({
+        platformUserId: `user${String(i)}`,
+      }));
+
+      const res = await request(getApp())
+        .post("/api/morons/x/test-list/entries")
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .send(items)
+        .expect(400);
+
+      expect(res.body.error).to.equal("Validation error");
+    });
+
+    it("persists reason in changelog", async () => {
+      const res = await request(getApp())
+        .post("/api/morons/x/test-list/entries")
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .send([{ platformUserId: "reasonuser", reason: "known spammer" }])
+        .expect(201);
+
+      expect(res.body.added).to.equal(1);
+    });
+
+    it("allows re-adding after removal", async () => {
+      // Add
+      await request(getApp())
+        .post("/api/morons/x/test-list/entries")
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .send([{ platformUserId: "flipflop" }])
+        .expect(201);
+
+      // Remove
+      await request(getApp())
+        .delete("/api/morons/x/test-list/entries")
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .send([{ platformUserId: "flipflop" }])
+        .expect(200);
+
+      // Re-add (should succeed, not be treated as duplicate)
+      const res = await request(getApp())
+        .post("/api/morons/x/test-list/entries")
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .send([{ platformUserId: "flipflop" }])
+        .expect(201);
+
+      expect(res.body.added).to.equal(1);
+      expect(res.body.skipped).to.equal(0);
+    });
   });
 
   // =========================================

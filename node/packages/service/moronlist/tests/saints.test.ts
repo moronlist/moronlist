@@ -110,6 +110,42 @@ describe("Saint routes", () => {
         .send([{ platformUserId: "saint4" }])
         .expect(404);
     });
+
+    it("rejects empty array body", async () => {
+      const res = await request(getApp())
+        .post("/api/morons/x/test-list/saints")
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .send([])
+        .expect(400);
+
+      expect(res.body.error).to.equal("Validation error");
+    });
+
+    it("allows re-adding after removal", async () => {
+      // Add
+      await request(getApp())
+        .post("/api/morons/x/test-list/saints")
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .send([{ platformUserId: "flip_saint" }])
+        .expect(201);
+
+      // Remove
+      await request(getApp())
+        .delete("/api/morons/x/test-list/saints")
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .send([{ platformUserId: "flip_saint" }])
+        .expect(200);
+
+      // Re-add (should succeed, not be treated as duplicate)
+      const res = await request(getApp())
+        .post("/api/morons/x/test-list/saints")
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .send([{ platformUserId: "flip_saint" }])
+        .expect(201);
+
+      expect(res.body.added).to.equal(1);
+      expect(res.body.skipped).to.equal(0);
+    });
   });
 
   // =========================================
