@@ -5,7 +5,12 @@ import { QuickAdd } from "./components/quick-add.js";
 import { MyLists } from "./components/my-lists.js";
 import { SubscriptionManager } from "./components/subscription-manager.js";
 import { CreateListForm } from "./components/create-list-form.js";
-import { fetchMe, fetchMySubscriptions, fetchMyLists } from "../lib/api-client.js";
+import {
+  fetchMe,
+  fetchMySubscriptions,
+  fetchMyLists,
+  completeOnboarding,
+} from "../lib/api-client.js";
 import {
   getApiUrl,
   setApiUrl,
@@ -24,6 +29,8 @@ type TabId = "home" | "lists" | "subscriptions" | "settings";
 
 type AppState = {
   user: User | null;
+  needsOnboarding: boolean;
+  onboardingIdentity: { id: string; email: string; name?: string } | null;
   subscriptions: Subscription[];
   myLists: MoronList[];
   status: StatusResponse | null;
@@ -54,9 +61,93 @@ function formatRelativeTime(timestamp: number): string {
   return new Date(timestamp).toLocaleDateString();
 }
 
+function OnboardingForm({
+  identity,
+  onComplete,
+  onLogout,
+}: {
+  identity: { id: string; email: string; name?: string } | null;
+  onComplete: () => void;
+  onLogout: () => void;
+}) {
+  const [username, setUsername] = useState("");
+  const [displayName, setDisplayName] = useState(identity?.name ?? "");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent): Promise<void> => {
+    e.preventDefault();
+    if (username.trim().length < 3) return;
+
+    setSubmitting(true);
+    setError(null);
+
+    try {
+      const result = await completeOnboarding(username.trim(), displayName.trim());
+      if (result.success) {
+        onComplete();
+      } else {
+        setError(result.error);
+      }
+    } catch {
+      setError("Network error. Try again.");
+    }
+    setSubmitting(false);
+  };
+
+  return (
+    <div className="px-4 py-6">
+      <div className="flex items-center justify-between mb-1">
+        <h2 className="text-sm font-semibold text-gray-700">Welcome to MoronList</h2>
+        <button onClick={onLogout} className="text-[10px] text-gray-400 hover:text-gray-600">
+          Sign out
+        </button>
+      </div>
+      <p className="text-xs text-gray-500 mb-4">
+        {identity?.email ?? "Pick a username to get started."}
+      </p>
+      <form onSubmit={(e) => void handleSubmit(e)} className="space-y-3">
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">Username</label>
+          <input
+            type="text"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            placeholder="e.g. jesternz"
+            className="w-full text-sm border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-moron-500"
+            minLength={3}
+            maxLength={24}
+          />
+          <p className="text-[10px] text-gray-400 mt-1">3-24 chars, lowercase, underscores ok</p>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">Display Name</label>
+          <input
+            type="text"
+            value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)}
+            placeholder="Your name"
+            className="w-full text-sm border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-moron-500"
+          />
+        </div>
+        {error !== null && <p className="text-xs text-red-600">{error}</p>}
+        <button
+          type="submit"
+          disabled={submitting || username.trim().length < 3}
+          className="w-full text-xs bg-moron-500 text-white px-3 py-2 rounded hover:bg-moron-600 disabled:opacity-50 transition-colors"
+        >
+          {submitting ? "Creating..." : "Get Started"}
+        </button>
+      </form>
+    </div>
+  );
+}
+
 function App() {
   const [state, setState] = useState<AppState>({
     user: null,
+    needsOnboarding: false,
+    onboardingIdentity: null,
     subscriptions: [],
     myLists: [],
     status: null,
@@ -81,22 +172,33 @@ function App() {
       ]);
 
       let user = storedUser;
+      let needsOnboarding = false;
+      let onboardingIdentity: AppState["onboardingIdentity"] = null;
       let subscriptions: Subscription[] = [];
       let myLists: MoronList[] = [];
 
-      if (user !== null) {
-        const [meResult, subsResult, listsResult] = await Promise.all([
-          fetchMe(),
-          fetchMySubscriptions(),
-          fetchMyLists(),
-        ]);
-
+      // Check auth status if we have a token
+      const token = await (await import("../lib/storage.js")).getAuthToken();
+      if (token !== null) {
+        const meResult = await fetchMe();
         if (meResult.success) {
-          user = meResult.data;
-          await setUser({ id: user.id, name: user.name, email: user.email });
+          const meData = meResult.data;
+          if (meData.needsOnboarding === true) {
+            needsOnboarding = true;
+            onboardingIdentity = meData.identity ?? null;
+            user = null;
+          } else if (meData.user !== null) {
+            user = meData.user;
+            await setUser({ id: user.id, name: user.name, email: user.email });
+
+            const [subsResult, listsResult] = await Promise.all([
+              fetchMySubscriptions(),
+              fetchMyLists(),
+            ]);
+            subscriptions = subsResult.success ? subsResult.data : [];
+            myLists = listsResult.success ? listsResult.data : [];
+          }
         }
-        subscriptions = subsResult.success ? subsResult.data : [];
-        myLists = listsResult.success ? listsResult.data : [];
       }
 
       // If there's a pending username, switch to home tab
@@ -105,6 +207,8 @@ function App() {
       setState((prev) => ({
         ...prev,
         user,
+        needsOnboarding,
+        onboardingIdentity,
         subscriptions,
         myLists,
         status: statusResult,
@@ -113,8 +217,7 @@ function App() {
         loading: false,
         pendingUsername: pending,
         activeTab,
-        error:
-          user === null && storedUser !== null ? "Session expired. Please sign in again." : null,
+        error: null,
       }));
     } catch (err) {
       setState((prev) => ({
@@ -129,20 +232,6 @@ function App() {
     loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only run on mount
   }, []);
-
-  const handleSyncNow = useCallback(async () => {
-    setState((prev) => ({ ...prev, loading: true }));
-    try {
-      await chrome.runtime.sendMessage({ type: "SYNC_NOW" });
-      await loadData();
-    } catch (err) {
-      setState((prev) => ({
-        ...prev,
-        loading: false,
-        error: err instanceof Error ? err.message : "Sync failed",
-      }));
-    }
-  }, [loadData]);
 
   const handleSignOut = useCallback(async () => {
     await chrome.runtime.sendMessage({ type: "LOGOUT" });
@@ -229,7 +318,7 @@ function App() {
 
       {!state.loading && (
         <div className="flex-1 overflow-y-auto">
-          {state.user === null && (
+          {state.user === null && !state.needsOnboarding && (
             <div className="px-4 py-6 text-center">
               <p className="text-sm text-gray-600 mb-4">
                 Sign in to MoronList to manage your block lists.
@@ -238,19 +327,19 @@ function App() {
             </div>
           )}
 
+          {state.needsOnboarding && (
+            <OnboardingForm
+              identity={state.onboardingIdentity}
+              onComplete={loadData}
+              onLogout={() => void handleSignOut()}
+            />
+          )}
+
           {state.user !== null && state.activeTab === "home" && (
             <>
               {state.status !== null && (
                 <div className="px-4 py-3 border-b border-gray-200 bg-white">
-                  <div className="flex items-center justify-between mb-2">
-                    <h2 className="text-sm font-semibold text-gray-700">Sync Status</h2>
-                    <button
-                      onClick={handleSyncNow}
-                      className="text-xs bg-moron-500 text-white px-2.5 py-1 rounded hover:bg-moron-600 transition-colors"
-                    >
-                      Sync Now
-                    </button>
-                  </div>
+                  <h2 className="text-sm font-semibold text-gray-700 mb-2">Stats</h2>
 
                   <div className="grid grid-cols-3 gap-3">
                     <div className="text-center">

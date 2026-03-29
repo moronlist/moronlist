@@ -11,7 +11,7 @@ const state: BlockState = {
 const MORONLIST_ATTR = "data-moronlist-processed";
 const MORONLIST_BTN_ATTR = "data-moronlist-btn";
 
-const DEBOUNCE_MS = 100;
+const DEBOUNCE_MS = 250;
 
 async function loadBlockedSets(): Promise<void> {
   try {
@@ -118,35 +118,51 @@ function markBlocked(tweetElement: Element): void {
   tweetElement.setAttribute(MORONLIST_ATTR, "blocked");
 }
 
-function markVisible(tweetElement: Element): void {
+function markProcessed(tweetElement: Element): void {
   tweetElement.setAttribute(MORONLIST_ATTR, "ok");
 }
 
-function createAddButton(username: string): HTMLElement {
+// MoronList ban icon (circle with line through it)
+const ML_ICON_SVG = `<svg viewBox="0 0 24 24" aria-hidden="true" class="r-4qtqp9 r-yyyyoo r-dnmrzs r-bnwqim r-lrvibr r-m6rgpd r-1xvli5t r-1hdv0qi"><g><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8 0-1.85.63-3.55 1.69-4.9L16.9 18.31C15.55 19.37 13.85 20 12 20zm6.31-3.1L7.1 5.69C8.45 4.63 10.15 4 12 4c4.42 0 8 3.58 8 8 0 1.85-.63 3.55-1.69 4.9z"></path></g></svg>`;
+
+function createActionBarButton(username: string): HTMLElement {
+  // Create wrapper div matching X's action bar button structure
+  const wrapper = document.createElement("div");
+  wrapper.setAttribute(MORONLIST_BTN_ATTR, "true");
+  wrapper.className = "css-175oi2r r-18u37iz r-1h0z5md r-1wron08";
+
   const btn = document.createElement("button");
-  btn.setAttribute(MORONLIST_BTN_ATTR, "true");
-  btn.textContent = "ML";
-  btn.title = `Add @${username} to MoronList`;
-  btn.style.cssText = [
-    "display: inline-flex",
-    "align-items: center",
-    "justify-content: center",
-    "width: 20px",
-    "height: 20px",
-    "border-radius: 50%",
-    "background: #ef4444",
-    "color: white",
-    "font-size: 8px",
-    "font-weight: bold",
-    "border: none",
-    "cursor: pointer",
-    "margin-left: 4px",
-    "opacity: 0",
-    "transition: opacity 0.15s ease",
-    "vertical-align: middle",
-    "line-height: 1",
-    "padding: 0",
-  ].join("; ");
+  btn.setAttribute("aria-label", `Add @${username} to MoronList`);
+  btn.setAttribute("role", "button");
+  btn.setAttribute("type", "button");
+  btn.className = "css-175oi2r r-1777fci r-bt1l66 r-bztko3 r-lrvibr r-1loqt21 r-1ny4l3l";
+
+  const inner = document.createElement("div");
+  inner.setAttribute("dir", "ltr");
+  inner.className =
+    "css-146c3p1 r-bcqeeo r-1ttztb7 r-qvutc0 r-37j5jr r-a023e6 r-rjixqe r-16dba41 r-1awozwy r-6koalj r-1h0z5md r-o7ynqc r-clp7b1 r-3s2u2q";
+  inner.style.color = "rgb(113, 118, 123)";
+
+  const iconContainer = document.createElement("div");
+  iconContainer.className = "css-175oi2r r-xoduu5";
+
+  // Hover background circle
+  const hoverBg = document.createElement("div");
+  hoverBg.className =
+    "css-175oi2r r-xoduu5 r-1p0dtai r-1d2f490 r-u8s1d r-zchlnj r-ipm5af r-1niwhzg r-sdzlij r-xf4iuw r-o7ynqc r-6416eg r-1ny4l3l";
+  iconContainer.appendChild(hoverBg);
+
+  // SVG icon
+  const iconSpan = document.createElement("span");
+  iconSpan.innerHTML = ML_ICON_SVG;
+  const svg = iconSpan.firstElementChild;
+  if (svg !== null) {
+    iconContainer.appendChild(svg);
+  }
+
+  inner.appendChild(iconContainer);
+  btn.appendChild(inner);
+  wrapper.appendChild(btn);
 
   btn.addEventListener("click", (e) => {
     e.preventDefault();
@@ -157,7 +173,7 @@ function createAddButton(username: string): HTMLElement {
     });
   });
 
-  return btn;
+  return wrapper;
 }
 
 function processTweet(tweetElement: Element): void {
@@ -169,7 +185,7 @@ function processTweet(tweetElement: Element): void {
       if (isBlocked(username)) {
         markBlocked(tweetElement);
       } else {
-        markVisible(tweetElement);
+        markProcessed(tweetElement);
       }
     }
     return;
@@ -178,7 +194,7 @@ function processTweet(tweetElement: Element): void {
   const username = extractUsernameFromTweet(tweetElement);
   if (username === null) {
     // Can't determine user -- show the tweet anyway
-    markVisible(tweetElement);
+    markProcessed(tweetElement);
     return;
   }
 
@@ -189,15 +205,15 @@ function processTweet(tweetElement: Element): void {
     return;
   }
 
-  markVisible(tweetElement);
+  markProcessed(tweetElement);
 
-  // Add ML quick-add button
-  const userNameContainer = tweetElement.querySelector('[data-testid="User-Name"]');
-  if (userNameContainer !== null) {
-    const existingBtn = userNameContainer.querySelector(`[${MORONLIST_BTN_ATTR}]`);
+  // Add MoronList button to the action bar (reply, repost, like, etc.)
+  const actionBar = tweetElement.querySelector('[role="group"]');
+  if (actionBar !== null) {
+    const existingBtn = actionBar.querySelector(`[${MORONLIST_BTN_ATTR}]`);
     if (existingBtn === null) {
-      const btn = createAddButton(username);
-      userNameContainer.appendChild(btn);
+      const btn = createActionBarButton(username);
+      actionBar.appendChild(btn);
     }
   }
 }
@@ -217,7 +233,7 @@ function reprocessAllTweets(): void {
       if (isBlocked(username)) {
         markBlocked(el);
       } else {
-        markVisible(el);
+        markProcessed(el);
       }
     }
   }
@@ -247,10 +263,16 @@ function setupMutationObserver(): void {
   const observer = new MutationObserver((mutations) => {
     let hasRelevantChanges = false;
     for (const mutation of mutations) {
-      if (mutation.addedNodes.length > 0) {
-        hasRelevantChanges = true;
-        break;
+      for (const node of mutation.addedNodes) {
+        if (
+          node instanceof HTMLElement &&
+          (node.tagName === "ARTICLE" || node.querySelector("article") !== null)
+        ) {
+          hasRelevantChanges = true;
+          break;
+        }
       }
+      if (hasRelevantChanges) break;
     }
     if (hasRelevantChanges) {
       debouncedProcessTweets();
