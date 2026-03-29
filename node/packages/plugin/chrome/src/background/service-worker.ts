@@ -1,7 +1,9 @@
 import { scheduleSync, isSyncAlarm, performFullSync, performSync } from "../lib/sync.js";
 import {
   getBlockedUsers,
+  setBlockedUsers,
   getSaintedUsers,
+  setSaintedUsers,
   getLastSyncTime,
   getMyLists,
   getAuthToken,
@@ -199,47 +201,57 @@ async function handleMessage(message: MessageType): Promise<unknown> {
     }
 
     case "ADD_ENTRY": {
+      // Optimistic: add to local blocked set immediately
+      const blocked = await getBlockedUsers();
+      const lower = message.platformUserId.toLowerCase();
+      if (!blocked.includes(lower)) {
+        blocked.push(lower);
+        await setBlockedUsers(blocked);
+        notifyContentScriptsOfUpdate();
+      }
+      // Then send to server
       const result = await addEntries(message.platform, message.slug, [
         { platformUserId: message.platformUserId, reason: message.reason },
       ]);
-      if (result.success) {
-        await performSync();
-        notifyContentScriptsOfUpdate();
-      }
       return result;
     }
 
     case "ADD_SAINT": {
-      const result = await addSaints(message.platform, message.slug, [
-        { platformUserId: message.platformUserId, reason: message.reason },
-      ]);
-      if (result.success) {
-        await performSync();
+      const sainted = await getSaintedUsers();
+      const sLower = message.platformUserId.toLowerCase();
+      if (!sainted.includes(sLower)) {
+        sainted.push(sLower);
+        await setSaintedUsers(sainted);
         notifyContentScriptsOfUpdate();
       }
-      return result;
+      const saintResult = await addSaints(message.platform, message.slug, [
+        { platformUserId: message.platformUserId, reason: message.reason },
+      ]);
+      return saintResult;
     }
 
     case "REMOVE_ENTRY": {
-      const result = await removeEntries(message.platform, message.slug, [
+      const blockedRm = await getBlockedUsers();
+      const rmLower = message.platformUserId.toLowerCase();
+      const filtered = blockedRm.filter((u) => u !== rmLower);
+      await setBlockedUsers(filtered);
+      notifyContentScriptsOfUpdate();
+      const rmResult = await removeEntries(message.platform, message.slug, [
         { platformUserId: message.platformUserId },
       ]);
-      if (result.success) {
-        await performSync();
-        notifyContentScriptsOfUpdate();
-      }
-      return result;
+      return rmResult;
     }
 
     case "REMOVE_SAINT": {
-      const result = await removeSaints(message.platform, message.slug, [
+      const saintedRm = await getSaintedUsers();
+      const srmLower = message.platformUserId.toLowerCase();
+      const sFiltered = saintedRm.filter((u) => u !== srmLower);
+      await setSaintedUsers(sFiltered);
+      notifyContentScriptsOfUpdate();
+      const srmResult = await removeSaints(message.platform, message.slug, [
         { platformUserId: message.platformUserId },
       ]);
-      if (result.success) {
-        await performSync();
-        notifyContentScriptsOfUpdate();
-      }
-      return result;
+      return srmResult;
     }
 
     case "GET_STATUS": {

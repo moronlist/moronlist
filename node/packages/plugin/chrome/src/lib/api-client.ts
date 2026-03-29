@@ -15,26 +15,30 @@ export type MoronList = {
   name: string;
   description: string | null;
   visibility: string;
-  ownerId: string;
-  createdAt: string;
-  updatedAt: string;
 };
 
 export type Subscription = {
-  id: string;
-  moronListId: string;
-  platform: string;
-  slug: string;
-  name: string;
-  entryCount: number;
-  saintCount: number;
-  version: number;
+  listId: string;
+  listPlatform: string;
+  listSlug: string;
+  listName: string;
+  subscribedAt: string;
 };
 
 export type ListMeta = {
+  platform: string;
+  slug: string;
+  name: string;
   version: number;
-  fileCount: number;
-  updatedAt: string;
+  entries: number;
+  files: number;
+  parents?: ParentNode[];
+};
+
+export type ParentNode = {
+  platform: string;
+  slug: string;
+  parents?: ParentNode[];
 };
 
 export type BatchResult = {
@@ -71,7 +75,7 @@ async function apiRequest<T>(path: string, options: RequestInit = {}): Promise<R
     });
     if (!response.ok) {
       const body = await response.text();
-      return { success: false, error: `HTTP ${response.status}: ${body}` };
+      return { success: false, error: `HTTP ${String(response.status)}: ${body}` };
     }
     if (response.status === 204) {
       return { success: true, data: undefined as T };
@@ -86,19 +90,30 @@ async function apiRequest<T>(path: string, options: RequestInit = {}): Promise<R
 
 // Auth
 
-export async function fetchMe(): Promise<Result<User>> {
-  return apiRequest<User>("/auth/me");
+// Server returns: { user: User | null, needsOnboarding?: boolean, identity?: {...} }
+export type MeResponse = {
+  user: User | null;
+  needsOnboarding?: boolean;
+  identity?: { id: string; email: string; name?: string };
+};
+
+export async function fetchMe(): Promise<Result<MeResponse>> {
+  return apiRequest<MeResponse>("/auth/me");
 }
 
+// Server returns: { success: true, user: User }
 export async function completeOnboarding(id: string, name: string): Promise<Result<User>> {
-  return apiRequest<User>(`/auth/onboarding`, {
+  const result = await apiRequest<{ success: boolean; user: User }>("/auth/complete-onboarding", {
     method: "POST",
     body: JSON.stringify({ id, name }),
   });
+  if (!result.success) return result;
+  return { success: true, data: result.data.user };
 }
 
 // Lists
 
+// Server returns: { list: MoronList } with 201
 export async function createList(data: {
   platform: string;
   slug: string;
@@ -106,57 +121,67 @@ export async function createList(data: {
   description?: string;
   visibility?: string;
 }): Promise<Result<MoronList>> {
-  return apiRequest<MoronList>("/api/lists", {
+  const result = await apiRequest<{ list: MoronList }>("/api/morons", {
     method: "POST",
     body: JSON.stringify(data),
   });
+  if (!result.success) return result;
+  return { success: true, data: result.data.list };
 }
 
+// Server returns: { list: MoronList }
 export async function updateList(
   platform: string,
   slug: string,
   data: { name?: string; description?: string; visibility?: string }
 ): Promise<Result<MoronList>> {
-  return apiRequest<MoronList>(
-    `/api/lists/${encodeURIComponent(platform)}/${encodeURIComponent(slug)}`,
+  const result = await apiRequest<{ list: MoronList }>(
+    `/api/morons/${encodeURIComponent(platform)}/${encodeURIComponent(slug)}`,
     {
-      method: "PATCH",
+      method: "PUT",
       body: JSON.stringify(data),
     }
   );
+  if (!result.success) return result;
+  return { success: true, data: result.data.list };
 }
 
+// Server returns: { deleted: true }
 export async function deleteList(platform: string, slug: string): Promise<Result<void>> {
   return apiRequest<void>(
-    `/api/lists/${encodeURIComponent(platform)}/${encodeURIComponent(slug)}`,
+    `/api/morons/${encodeURIComponent(platform)}/${encodeURIComponent(slug)}`,
     { method: "DELETE" }
   );
 }
 
+// Server returns: { list: MoronList } with 201
 export async function forkList(
   platform: string,
   slug: string,
   newSlug: string,
   newName?: string
 ): Promise<Result<MoronList>> {
-  return apiRequest<MoronList>(
-    `/api/lists/${encodeURIComponent(platform)}/${encodeURIComponent(slug)}/fork`,
+  const result = await apiRequest<{ list: MoronList }>(
+    `/api/morons/${encodeURIComponent(platform)}/${encodeURIComponent(slug)}/actions/fork`,
     {
       method: "POST",
       body: JSON.stringify({ slug: newSlug, name: newName }),
     }
   );
+  if (!result.success) return result;
+  return { success: true, data: result.data.list };
 }
 
 // Inheritance
 
+// Server returns: { parents: [...] }
 export async function setParents(
   platform: string,
   slug: string,
   parents: string[]
 ): Promise<Result<void>> {
   return apiRequest<void>(
-    `/api/lists/${encodeURIComponent(platform)}/${encodeURIComponent(slug)}/parents`,
+    `/api/morons/${encodeURIComponent(platform)}/${encodeURIComponent(slug)}/parents`,
     {
       method: "PUT",
       body: JSON.stringify({ parents }),
@@ -166,13 +191,14 @@ export async function setParents(
 
 // Entries (array bodies)
 
+// Server returns: { added: N, skipped: M }
 export async function addEntries(
   platform: string,
   slug: string,
   entries: Array<{ platformUserId: string; reason?: string }>
 ): Promise<Result<BatchResult>> {
   return apiRequest<BatchResult>(
-    `/api/lists/${encodeURIComponent(platform)}/${encodeURIComponent(slug)}/entries`,
+    `/api/morons/${encodeURIComponent(platform)}/${encodeURIComponent(slug)}/entries`,
     {
       method: "POST",
       body: JSON.stringify(entries),
@@ -180,13 +206,14 @@ export async function addEntries(
   );
 }
 
+// Server returns: { removed: N, skipped: M }
 export async function removeEntries(
   platform: string,
   slug: string,
   entries: Array<{ platformUserId: string }>
 ): Promise<Result<RemoveBatchResult>> {
   return apiRequest<RemoveBatchResult>(
-    `/api/lists/${encodeURIComponent(platform)}/${encodeURIComponent(slug)}/entries`,
+    `/api/morons/${encodeURIComponent(platform)}/${encodeURIComponent(slug)}/entries`,
     {
       method: "DELETE",
       body: JSON.stringify(entries),
@@ -196,13 +223,14 @@ export async function removeEntries(
 
 // Saints (array bodies)
 
+// Server returns: { added: N, skipped: M }
 export async function addSaints(
   platform: string,
   slug: string,
   saints: Array<{ platformUserId: string; reason?: string }>
 ): Promise<Result<BatchResult>> {
   return apiRequest<BatchResult>(
-    `/api/lists/${encodeURIComponent(platform)}/${encodeURIComponent(slug)}/saints`,
+    `/api/morons/${encodeURIComponent(platform)}/${encodeURIComponent(slug)}/saints`,
     {
       method: "POST",
       body: JSON.stringify(saints),
@@ -210,13 +238,14 @@ export async function addSaints(
   );
 }
 
+// Server returns: { removed: N, skipped: M }
 export async function removeSaints(
   platform: string,
   slug: string,
   saints: Array<{ platformUserId: string }>
 ): Promise<Result<RemoveBatchResult>> {
   return apiRequest<RemoveBatchResult>(
-    `/api/lists/${encodeURIComponent(platform)}/${encodeURIComponent(slug)}/saints`,
+    `/api/morons/${encodeURIComponent(platform)}/${encodeURIComponent(slug)}/saints`,
     {
       method: "DELETE",
       body: JSON.stringify(saints),
@@ -226,6 +255,7 @@ export async function removeSaints(
 
 // Subscriptions
 
+// Server returns: { subscription: {...} } with 201
 export async function subscribe(moronListId: string): Promise<Result<void>> {
   return apiRequest<void>("/api/subscriptions", {
     method: "POST",
@@ -233,6 +263,7 @@ export async function subscribe(moronListId: string): Promise<Result<void>> {
   });
 }
 
+// Server returns: { deleted: true }
 export async function unsubscribe(platform: string, slug: string): Promise<Result<void>> {
   return apiRequest<void>(
     `/api/subscriptions/${encodeURIComponent(platform)}/${encodeURIComponent(slug)}`,
@@ -242,12 +273,18 @@ export async function unsubscribe(platform: string, slug: string): Promise<Resul
 
 // My stuff
 
+// Server returns: { lists: MoronList[] }
 export async function fetchMyLists(): Promise<Result<MoronList[]>> {
-  return apiRequest<MoronList[]>("/api/me/lists");
+  const result = await apiRequest<{ lists: MoronList[] }>("/api/me/morons");
+  if (!result.success) return result;
+  return { success: true, data: result.data.lists };
 }
 
+// Server returns: { subscriptions: Subscription[] }
 export async function fetchMySubscriptions(): Promise<Result<Subscription[]>> {
-  return apiRequest<Subscription[]>("/api/me/subscriptions");
+  const result = await apiRequest<{ subscriptions: Subscription[] }>("/api/me/subscriptions");
+  if (!result.success) return result;
+  return { success: true, data: result.data.subscriptions };
 }
 
 // Static data (from data.moronlist.com)
@@ -259,8 +296,7 @@ export async function fetchMeta(platform: string, slug: string): Promise<Result<
       `${dataUrl}/${encodeURIComponent(platform)}/${encodeURIComponent(slug)}/meta.json`
     );
     if (!response.ok) {
-      const body = await response.text();
-      return { success: false, error: `HTTP ${response.status}: ${body}` };
+      return { success: false, error: `HTTP ${String(response.status)}` };
     }
     const data = (await response.json()) as ListMeta;
     return { success: true, data };
@@ -278,11 +314,10 @@ export async function fetchTxtFile(
   const dataUrl = await getDataUrl();
   try {
     const response = await fetch(
-      `${dataUrl}/${encodeURIComponent(platform)}/${encodeURIComponent(slug)}/${fileIndex}.txt`
+      `${dataUrl}/${encodeURIComponent(platform)}/${encodeURIComponent(slug)}/${String(fileIndex)}.txt`
     );
     if (!response.ok) {
-      const body = await response.text();
-      return { success: false, error: `HTTP ${response.status}: ${body}` };
+      return { success: false, error: `HTTP ${String(response.status)}` };
     }
     const text = await response.text();
     return { success: true, data: text };
