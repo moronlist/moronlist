@@ -3,8 +3,13 @@
   "name": "MoronList",
   "version": "0.0.1",
   "description": "Block morons across social platforms",
-  "permissions": ["storage", "activeTab", "contextMenus", "alarms"],
-  "host_permissions": ["https://x.com/*", "https://twitter.com/*"],
+  "permissions": ["storage", "activeTab", "contextMenus", "alarms", "tabs"],
+  "host_permissions": [
+    "https://x.com/*",
+    "https://twitter.com/*",
+    "https://api.moronlist.com/*",
+    "https://data.moronlist.com/*"
+  ],
   "background": {
     "service_worker": "background.js",
     "type": "module"

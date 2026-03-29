@@ -1,36 +1,24 @@
 /**
- * Moron list CRUD + browse/search/popular routes
+ * Moron list CRUD routes
  *
  * Routes:
  * - POST /api/morons - create list
- * - GET /api/morons/:platform/:slug - get list
  * - PUT /api/morons/:platform/:slug - update list
  * - DELETE /api/morons/:platform/:slug - delete list
- * - POST /api/morons/:platform/:slug/fork - fork list
- * - GET /api/morons/:platform - browse lists on platform
- * - GET /api/morons/:platform/search?q= - search lists
- * - GET /api/morons/:platform/popular - popular lists
+ * - POST /api/morons/:platform/:slug/actions/fork - fork list
  */
 
 import { Router, type Request, type Response } from "express";
 import { logger } from "logger";
 import type { Repositories } from "../repositories/interfaces/index.js";
-import {
-  requireAuth,
-  optionalAuth,
-  type AuthenticatedRequest,
-  type PersonaJWTPayload,
-} from "../middleware/auth.js";
+import { requireAuth, type AuthenticatedRequest } from "../middleware/auth.js";
 import { param } from "../middleware/params.js";
 import {
   createMoronListBody,
   updateMoronListBody,
   forkMoronListBody,
-  browseQuery,
-  searchQuery,
-  popularQuery,
 } from "../validation/schemas.js";
-import { createList, updateList, deleteList, forkList, canReadList } from "../domain/moron-list.js";
+import { createList, updateList, deleteList, forkList } from "../domain/moron-list.js";
 
 export function createMoronRoutes(repos: Repositories): Router {
   const router = Router();
@@ -83,120 +71,6 @@ export function createMoronRoutes(repos: Repositories): Router {
     } catch (error) {
       logger.error("Create list error", error);
       res.status(500).json({ error: "Failed to create list" });
-    }
-  });
-
-  // GET /api/morons/:platform/search - search lists (must be before :slug route)
-  router.get("/:platform/search", (req: Request, res: Response) => {
-    try {
-      const platform = param(req, "platform");
-      if (platform === undefined) {
-        res.status(400).json({ error: "Platform is required" });
-        return;
-      }
-
-      const parsed = searchQuery.safeParse(req.query);
-      if (!parsed.success) {
-        res.status(400).json({
-          error: "Validation error",
-          details: parsed.error.errors.map((e) => ({
-            path: e.path.join("."),
-            message: e.message,
-          })),
-        });
-        return;
-      }
-
-      const { q, offset, limit } = parsed.data;
-      const lists = repos.moronList.searchByPlatform(platform, q, offset, limit);
-
-      res.json({
-        lists: lists.map(formatList),
-        offset,
-        limit,
-      });
-    } catch (error) {
-      logger.error("Search lists error", error);
-      res.status(500).json({ error: "Failed to search lists" });
-    }
-  });
-
-  // GET /api/morons/:platform/popular - popular lists (must be before :slug route)
-  router.get("/:platform/popular", (req: Request, res: Response) => {
-    try {
-      const platform = param(req, "platform");
-      if (platform === undefined) {
-        res.status(400).json({ error: "Platform is required" });
-        return;
-      }
-
-      const parsed = popularQuery.safeParse(req.query);
-      if (!parsed.success) {
-        res.status(400).json({
-          error: "Validation error",
-          details: parsed.error.errors.map((e) => ({
-            path: e.path.join("."),
-            message: e.message,
-          })),
-        });
-        return;
-      }
-
-      const { offset, limit } = parsed.data;
-      const lists = repos.moronList.findPopularByPlatform(platform, offset, limit);
-
-      res.json({
-        lists: lists.map(formatList),
-        offset,
-        limit,
-      });
-    } catch (error) {
-      logger.error("Popular lists error", error);
-      res.status(500).json({ error: "Failed to get popular lists" });
-    }
-  });
-
-  // GET /api/morons/:platform/:slug - get list
-  router.get("/:platform/:slug", optionalAuth, (req: Request, res: Response) => {
-    try {
-      const platform = param(req, "platform");
-      const slug = param(req, "slug");
-      if (platform === undefined || slug === undefined) {
-        res.status(400).json({ error: "Platform and slug are required" });
-        return;
-      }
-
-      const list = repos.moronList.findByPlatformAndSlug(platform, slug);
-      if (list === null) {
-        res.status(404).json({ error: "List not found" });
-        return;
-      }
-
-      const auth = (req as AuthenticatedRequest).auth as PersonaJWTPayload | undefined;
-      const userId = auth === undefined ? undefined : auth.userId;
-      if (!canReadList(list, userId)) {
-        res.status(404).json({ error: "List not found" });
-        return;
-      }
-
-      const entryCount = repos.moronEntry.countByList(platform, slug);
-      const saintCount = repos.saintEntry.countByList(platform, slug);
-      const subscriberCount = repos.subscription.countByList(platform, slug);
-
-      res.json({
-        list: {
-          ...formatList(list),
-          entryCount,
-          saintCount,
-          subscriberCount,
-          isOwner: userId !== undefined && list.ownerId === userId,
-          isSubscribed:
-            userId !== undefined ? repos.subscription.isSubscribed(userId, platform, slug) : false,
-        },
-      });
-    } catch (error) {
-      logger.error("Get list error", error);
-      res.status(500).json({ error: "Failed to get list" });
     }
   });
 
@@ -278,8 +152,8 @@ export function createMoronRoutes(repos: Repositories): Router {
     }
   });
 
-  // POST /api/morons/:platform/:slug/fork - fork list
-  router.post("/:platform/:slug/fork", requireAuth, (req: Request, res: Response) => {
+  // POST /api/morons/:platform/:slug/actions/fork - fork list
+  router.post("/:platform/:slug/actions/fork", requireAuth, (req: Request, res: Response) => {
     try {
       const platform = param(req, "platform");
       const slug = param(req, "slug");
@@ -330,44 +204,6 @@ export function createMoronRoutes(repos: Repositories): Router {
     } catch (error) {
       logger.error("Fork list error", error);
       res.status(500).json({ error: "Failed to fork list" });
-    }
-  });
-
-  // GET /api/morons/:platform - browse lists on platform
-  // This must be LAST among /:platform/* routes because the others are more specific
-  router.get("/:platform", (req: Request, res: Response) => {
-    try {
-      const platform = param(req, "platform");
-      if (platform === undefined) {
-        res.status(400).json({ error: "Platform is required" });
-        return;
-      }
-
-      const parsed = browseQuery.safeParse(req.query);
-      if (!parsed.success) {
-        res.status(400).json({
-          error: "Validation error",
-          details: parsed.error.errors.map((e) => ({
-            path: e.path.join("."),
-            message: e.message,
-          })),
-        });
-        return;
-      }
-
-      const { offset, limit } = parsed.data;
-      const lists = repos.moronList.findByPlatform(platform, offset, limit);
-      const total = repos.moronList.countByPlatform(platform);
-
-      res.json({
-        lists: lists.map(formatList),
-        total,
-        offset,
-        limit,
-      });
-    } catch (error) {
-      logger.error("Browse lists error", error);
-      res.status(500).json({ error: "Failed to browse lists" });
     }
   });
 

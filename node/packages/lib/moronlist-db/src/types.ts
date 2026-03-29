@@ -26,33 +26,12 @@ export type MoronListDbRow = {
   description: string | null;
   visibility: string; // public, private, unlisted
   version: number;
+  entry_count: number;
+  saint_count: number;
   forked_from_platform: string | null; // FK to moron_list
   forked_from_slug: string | null; // FK to moron_list
   created_at: string;
   updated_at: string;
-};
-
-// Moron entry table row
-export type MoronEntryDbRow = {
-  id: string; // UUID
-  list_platform: string;
-  list_slug: string;
-  platform_user_id: string;
-  display_name: string | null;
-  reason: string | null;
-  added_by_id: string; // FK to user.id
-  created_at: string;
-};
-
-// Saint entry table row
-export type SaintEntryDbRow = {
-  id: string; // UUID
-  list_platform: string;
-  list_slug: string;
-  platform_user_id: string;
-  reason: string | null;
-  added_by_id: string; // FK to user.id
-  created_at: string;
 };
 
 // Moron list inheritance table row
@@ -73,7 +52,17 @@ export type ChangelogDbRow = {
   action: string; // ADD, REMOVE, ADD_SAINT, REMOVE_SAINT
   platform_user_id: string;
   user_id: string; // FK to user.id
+  reason: string | null;
+  flush_version: number | null;
   created_at: string;
+};
+
+// Flush state table row
+export type FlushStateDbRow = {
+  list_platform: string;
+  list_slug: string;
+  last_flushed_version: number;
+  last_flushed_at: string | null;
 };
 
 // Subscription table row

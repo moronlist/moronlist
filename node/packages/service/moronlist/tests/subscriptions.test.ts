@@ -4,12 +4,11 @@
 
 import { expect } from "chai";
 import request from "supertest";
-import { getApp, getRepos, resetDatabase, createTestUser } from "./setup.js";
+import { getApp, resetDatabase, createTestUser } from "./setup.js";
 
 describe("Subscription routes", () => {
   let ownerToken: string;
   let subscriberToken: string;
-  let subscriberId: string;
 
   beforeEach(async () => {
     resetDatabase();
@@ -18,7 +17,6 @@ describe("Subscription routes", () => {
 
     const subscriber = createTestUser({ id: "subscriber" });
     subscriberToken = subscriber.token;
-    subscriberId = subscriber.userId;
 
     // Create a list
     await request(getApp())
@@ -88,6 +86,54 @@ describe("Subscription routes", () => {
 
       expect(res.body.error).to.equal("Validation error");
     });
+
+    it("cannot subscribe to a private list", async () => {
+      // Create a private list
+      await request(getApp())
+        .post("/api/morons")
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .send({
+          platform: "x",
+          slug: "priv-sub-list",
+          name: "Private Sub List",
+          visibility: "private",
+        })
+        .expect(201);
+
+      await request(getApp())
+        .post("/api/subscriptions")
+        .set("Authorization", `Bearer ${subscriberToken}`)
+        .send({ moronListId: "x/priv-sub-list" })
+        .expect(404);
+    });
+
+    it("subscribing to same list twice is idempotent", async () => {
+      // Subscribe once
+      const res1 = await request(getApp())
+        .post("/api/subscriptions")
+        .set("Authorization", `Bearer ${subscriberToken}`)
+        .send({ moronListId: "x/test-list" })
+        .expect(201);
+
+      expect(res1.body.subscription.listId).to.equal("x/test-list");
+
+      // Subscribe again
+      const res2 = await request(getApp())
+        .post("/api/subscriptions")
+        .set("Authorization", `Bearer ${subscriberToken}`)
+        .send({ moronListId: "x/test-list" })
+        .expect(201);
+
+      expect(res2.body.subscription.listId).to.equal("x/test-list");
+
+      // Verify only one subscription exists
+      const meSubs = await request(getApp())
+        .get("/api/me/subscriptions")
+        .set("Authorization", `Bearer ${subscriberToken}`)
+        .expect(200);
+
+      expect(meSubs.body.subscriptions).to.have.lengthOf(1);
+    });
   });
 
   // =========================================
@@ -151,37 +197,6 @@ describe("Subscription routes", () => {
         .expect(200);
 
       expect(res.body.subscriptions).to.have.lengthOf(0);
-    });
-  });
-
-  // =========================================
-  // Subscriber count
-  // =========================================
-
-  describe("subscriber count", () => {
-    it("updates on subscribe and unsubscribe", async () => {
-      // Initially 0
-      let listRes = await request(getApp()).get("/api/morons/x/test-list").expect(200);
-      expect(listRes.body.list.subscriberCount).to.equal(0);
-
-      // Subscribe
-      await request(getApp())
-        .post("/api/subscriptions")
-        .set("Authorization", `Bearer ${subscriberToken}`)
-        .send({ moronListId: "x/test-list" })
-        .expect(201);
-
-      listRes = await request(getApp()).get("/api/morons/x/test-list").expect(200);
-      expect(listRes.body.list.subscriberCount).to.equal(1);
-
-      // Unsubscribe
-      await request(getApp())
-        .delete("/api/subscriptions/x/test-list")
-        .set("Authorization", `Bearer ${subscriberToken}`)
-        .expect(200);
-
-      listRes = await request(getApp()).get("/api/morons/x/test-list").expect(200);
-      expect(listRes.body.list.subscriberCount).to.equal(0);
     });
   });
 });

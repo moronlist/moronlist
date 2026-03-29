@@ -17,11 +17,11 @@ after(async function () {
 });
 
 // Import all test suites
+import "./health.test.js";
 import "./auth.test.js";
 import "./morons.test.js";
 import "./entries.test.js";
 import "./saints.test.js";
 import "./inheritance.test.js";
 import "./subscriptions.test.js";
-import "./sync.test.js";
-import "./users.test.js";
+import "./cron.test.js";

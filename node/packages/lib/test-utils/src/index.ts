@@ -254,6 +254,8 @@ export function insertTestMoronList(
         description: p.description,
         visibility: p.visibility,
         version: p.version,
+        entry_count: p.entryCount,
+        saint_count: p.saintCount,
         forked_from_platform: p.forkedFromPlatform,
         forked_from_slug: p.forkedFromSlug,
         created_at: p.createdAt,
@@ -267,89 +269,12 @@ export function insertTestMoronList(
       description: data.description ?? null,
       visibility: data.visibility ?? "public",
       version: data.version ?? 0,
+      entryCount: 0,
+      saintCount: 0,
       forkedFromPlatform: data.forked_from_platform ?? null,
       forkedFromSlug: data.forked_from_slug ?? null,
       createdAt: now,
       updatedAt: now,
-    }
-  );
-}
-
-export function insertTestMoronEntry(
-  db: Database.Database,
-  data: {
-    id: string;
-    list_platform: string;
-    list_slug: string;
-    platform_user_id: string;
-    display_name?: string;
-    reason?: string;
-    added_by_id: string;
-  }
-): void {
-  const now = new Date().toISOString();
-
-  executeInsert(
-    db,
-    schema,
-    (q, p) =>
-      q.insertInto("moron_entry").values({
-        id: p.id,
-        list_platform: p.listPlatform,
-        list_slug: p.listSlug,
-        platform_user_id: p.platformUserId,
-        display_name: p.displayName,
-        reason: p.reason,
-        added_by_id: p.addedById,
-        created_at: p.createdAt,
-      }),
-    {
-      id: data.id,
-      listPlatform: data.list_platform,
-      listSlug: data.list_slug,
-      platformUserId: data.platform_user_id,
-      displayName: data.display_name ?? null,
-      reason: data.reason ?? null,
-      addedById: data.added_by_id,
-      createdAt: now,
-    }
-  );
-}
-
-export function insertTestSaintEntry(
-  db: Database.Database,
-  data: {
-    id: string;
-    list_platform: string;
-    list_slug: string;
-    platform_user_id: string;
-    reason?: string;
-    added_by_id: string;
-  }
-): void {
-  const now = new Date().toISOString();
-
-  executeInsert(
-    db,
-    schema,
-    (q, p) =>
-      q.insertInto("saint_entry").values({
-        id: p.id,
-        list_platform: p.listPlatform,
-        list_slug: p.listSlug,
-        platform_user_id: p.platformUserId,
-        reason: p.reason,
-        added_by_id: p.addedById,
-        created_at: p.createdAt,
-      }),
-    {
-      id: data.id,
-      listPlatform: data.list_platform,
-      listSlug: data.list_slug,
-      platformUserId: data.platform_user_id,
-      reason: data.reason ?? null,
-      addedById: data.added_by_id,
-      createdAt: now,
     }
   );
 }
@@ -425,6 +350,7 @@ export function insertTestChangelog(
     action: string;
     platform_user_id: string;
     user_id: string;
+    reason?: string;
   }
 ): void {
   const now = new Date().toISOString();
@@ -441,6 +367,8 @@ export function insertTestChangelog(
         action: p.action,
         platform_user_id: p.platformUserId,
         user_id: p.userId,
+        reason: p.reason,
+        flush_version: p.flushVersion,
         created_at: p.createdAt,
       }),
     {
@@ -451,6 +379,8 @@ export function insertTestChangelog(
       action: data.action,
       platformUserId: data.platform_user_id,
       userId: data.user_id,
+      reason: data.reason ?? null,
+      flushVersion: null,
       createdAt: now,
     }
   );

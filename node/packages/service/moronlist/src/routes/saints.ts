@@ -1,80 +1,24 @@
 /**
- * Saint entry routes
+ * Saint entry routes (changelog-only)
  *
  * Routes:
- * - GET /api/morons/:platform/:slug/saints?offset=&limit=
- * - POST /api/morons/:platform/:slug/saints
- * - POST /api/morons/:platform/:slug/saints/batch
- * - DELETE /api/morons/:platform/:slug/saints/:saintId
- * - DELETE /api/morons/:platform/:slug/saints?platformUserId=
+ * - POST /api/morons/:platform/:slug/saints — add saints (array body)
+ * - DELETE /api/morons/:platform/:slug/saints — remove saints (array body)
  */
 
 import { Router, type Request, type Response } from "express";
 import { logger } from "logger";
 import type { Repositories } from "../repositories/interfaces/index.js";
-import {
-  requireAuth,
-  optionalAuth,
-  type AuthenticatedRequest,
-  type PersonaJWTPayload,
-} from "../middleware/auth.js";
+import { requireAuth, type AuthenticatedRequest } from "../middleware/auth.js";
 import { param } from "../middleware/params.js";
-import {
-  paginationQuery,
-  createSaintBody,
-  batchCreateSaintsBody,
-  deleteSaintByPlatformUserQuery,
-} from "../validation/schemas.js";
-import { canReadList, canWriteList } from "../domain/moron-list.js";
+import { addSaintsBody, removeSaintsBody } from "../validation/schemas.js";
+import { canWriteList } from "../domain/moron-list.js";
+import { isCurrentlySainted } from "../domain/changelog.js";
 
 export function createSaintRoutes(repos: Repositories): Router {
   const router = Router({ mergeParams: true });
 
-  // GET /saints?offset=&limit=
-  router.get("/", optionalAuth, (req: Request, res: Response) => {
-    try {
-      const platform = param(req, "platform");
-      const slug = param(req, "slug");
-      if (platform === undefined || slug === undefined) {
-        res.status(400).json({ error: "Platform and slug are required" });
-        return;
-      }
-
-      const list = repos.moronList.findByPlatformAndSlug(platform, slug);
-      if (list === null) {
-        res.status(404).json({ error: "List not found" });
-        return;
-      }
-
-      const auth = (req as AuthenticatedRequest).auth as PersonaJWTPayload | undefined;
-      if (!canReadList(list, auth === undefined ? undefined : auth.userId)) {
-        res.status(404).json({ error: "List not found" });
-        return;
-      }
-
-      const parsed = paginationQuery.safeParse(req.query);
-      if (!parsed.success) {
-        res.status(400).json({ error: "Invalid pagination parameters" });
-        return;
-      }
-
-      const { offset, limit } = parsed.data;
-      const saints = repos.saintEntry.findByList(platform, slug, offset, limit);
-      const total = repos.saintEntry.countByList(platform, slug);
-
-      res.json({
-        saints: saints.map(formatSaint),
-        total,
-        offset,
-        limit,
-      });
-    } catch (error) {
-      logger.error("Get saints error", error);
-      res.status(500).json({ error: "Failed to get saints" });
-    }
-  });
-
-  // POST /saints
+  // POST /saints — add saints to the list
   router.post("/", requireAuth, (req: Request, res: Response) => {
     try {
       const platform = param(req, "platform");
@@ -93,7 +37,7 @@ export function createSaintRoutes(repos: Repositories): Router {
       const auth = (req as AuthenticatedRequest).auth;
       const userId = auth.userId;
       if (userId === undefined) {
-        res.status(401).json({ error: "Not authenticated" });
+        res.status(401).json({ error: "Authentication required" });
         return;
       }
       if (!canWriteList(list, userId)) {
@@ -101,7 +45,7 @@ export function createSaintRoutes(repos: Repositories): Router {
         return;
       }
 
-      const parsed = createSaintBody.safeParse(req.body);
+      const parsed = addSaintsBody.safeParse(req.body);
       if (!parsed.success) {
         res.status(400).json({
           error: "Validation error",
@@ -113,183 +57,45 @@ export function createSaintRoutes(repos: Repositories): Router {
         return;
       }
 
-      // Check if already exists
-      const existing = repos.saintEntry.findByListAndPlatformUser(
-        platform,
-        slug,
-        parsed.data.platformUserId
+      // Filter out duplicates (already sainted via changelog)
+      const toAdd = parsed.data.filter(
+        (entry) => !isCurrentlySainted(repos, platform, slug, entry.platformUserId)
       );
-      if (existing !== null) {
-        res.status(409).json({ error: "User is already on the saint list" });
+
+      const skipped = parsed.data.length - toAdd.length;
+
+      if (toAdd.length === 0) {
+        res.json({ added: 0, skipped });
         return;
       }
 
-      const saint = repos.saintEntry.create({
-        listPlatform: platform,
-        listSlug: slug,
-        platformUserId: parsed.data.platformUserId,
-        reason: parsed.data.reason,
-        addedById: userId,
-      });
-
+      // Increment version once for the whole batch
       const newVersion = repos.moronList.incrementVersion(platform, slug);
-      repos.changelog.create({
-        listPlatform: platform,
-        listSlug: slug,
-        version: newVersion,
-        action: "ADD_SAINT",
-        platformUserId: parsed.data.platformUserId,
-        userId,
-      });
 
-      res.status(201).json({ saint: formatSaint(saint) });
-    } catch (error) {
-      logger.error("Create saint error", error);
-      res.status(500).json({ error: "Failed to create saint" });
-    }
-  });
-
-  // POST /saints/batch
-  router.post("/batch", requireAuth, (req: Request, res: Response) => {
-    try {
-      const platform = param(req, "platform");
-      const slug = param(req, "slug");
-      if (platform === undefined || slug === undefined) {
-        res.status(400).json({ error: "Platform and slug are required" });
-        return;
-      }
-
-      const list = repos.moronList.findByPlatformAndSlug(platform, slug);
-      if (list === null) {
-        res.status(404).json({ error: "List not found" });
-        return;
-      }
-
-      const auth = (req as AuthenticatedRequest).auth;
-      const userId = auth.userId;
-      if (userId === undefined) {
-        res.status(401).json({ error: "Not authenticated" });
-        return;
-      }
-      if (!canWriteList(list, userId)) {
-        res.status(403).json({ error: "Only the list owner can add saints" });
-        return;
-      }
-
-      const parsed = batchCreateSaintsBody.safeParse(req.body);
-      if (!parsed.success) {
-        res.status(400).json({
-          error: "Validation error",
-          details: parsed.error.errors.map((e) => ({
-            path: e.path.join("."),
-            message: e.message,
-          })),
-        });
-        return;
-      }
-
-      // Filter out duplicates
-      const newSaints = parsed.data.saints.filter(
-        (s) => repos.saintEntry.findByListAndPlatformUser(platform, slug, s.platformUserId) === null
-      );
-
-      if (newSaints.length === 0) {
-        res.json({ saints: [], added: 0, skipped: parsed.data.saints.length });
-        return;
-      }
-
-      const created = repos.saintEntry.createBatch(
-        newSaints.map((s) => ({
-          listPlatform: platform,
-          listSlug: slug,
-          platformUserId: s.platformUserId,
-          reason: s.reason,
-          addedById: userId,
-        }))
-      );
-
-      const newVersion = repos.moronList.incrementVersion(platform, slug);
+      // Write ADD_SAINT changelog entries
       repos.changelog.createBatch(
-        created.map((saint) => ({
+        toAdd.map((entry) => ({
           listPlatform: platform,
           listSlug: slug,
           version: newVersion,
           action: "ADD_SAINT" as const,
-          platformUserId: saint.platformUserId,
+          platformUserId: entry.platformUserId,
           userId,
+          reason: entry.reason,
         }))
       );
 
-      res.status(201).json({
-        saints: created.map(formatSaint),
-        added: created.length,
-        skipped: parsed.data.saints.length - newSaints.length,
-      });
+      // Update saint_count on the list
+      repos.moronList.updateEntryCounts(platform, slug, 0, toAdd.length);
+
+      res.status(201).json({ added: toAdd.length, skipped });
     } catch (error) {
-      logger.error("Batch create saints error", error);
-      res.status(500).json({ error: "Failed to create saints" });
+      logger.error("Add saints error", error);
+      res.status(500).json({ error: "Failed to add saints" });
     }
   });
 
-  // DELETE /saints/:saintId
-  router.delete("/:saintId", requireAuth, (req: Request, res: Response) => {
-    try {
-      const platform = param(req, "platform");
-      const slug = param(req, "slug");
-      const saintId = param(req, "saintId");
-      if (platform === undefined || slug === undefined || saintId === undefined) {
-        res.status(400).json({ error: "Platform, slug, and saint ID are required" });
-        return;
-      }
-
-      const list = repos.moronList.findByPlatformAndSlug(platform, slug);
-      if (list === null) {
-        res.status(404).json({ error: "List not found" });
-        return;
-      }
-
-      const auth = (req as AuthenticatedRequest).auth;
-      const userId = auth.userId;
-      if (userId === undefined) {
-        res.status(401).json({ error: "Not authenticated" });
-        return;
-      }
-      if (!canWriteList(list, userId)) {
-        res.status(403).json({ error: "Only the list owner can remove saints" });
-        return;
-      }
-
-      const saint = repos.saintEntry.findById(saintId);
-      if (saint === null) {
-        res.status(404).json({ error: "Saint not found" });
-        return;
-      }
-
-      if (saint.listPlatform !== platform || saint.listSlug !== slug) {
-        res.status(404).json({ error: "Saint not found in this list" });
-        return;
-      }
-
-      repos.saintEntry.deleteById(saintId);
-
-      const newVersion = repos.moronList.incrementVersion(platform, slug);
-      repos.changelog.create({
-        listPlatform: platform,
-        listSlug: slug,
-        version: newVersion,
-        action: "REMOVE_SAINT",
-        platformUserId: saint.platformUserId,
-        userId,
-      });
-
-      res.json({ deleted: true });
-    } catch (error) {
-      logger.error("Delete saint error", error);
-      res.status(500).json({ error: "Failed to delete saint" });
-    }
-  });
-
-  // DELETE /saints?platformUserId=
+  // DELETE /saints — remove saints from the list
   router.delete("/", requireAuth, (req: Request, res: Response) => {
     try {
       const platform = param(req, "platform");
@@ -299,12 +105,6 @@ export function createSaintRoutes(repos: Repositories): Router {
         return;
       }
 
-      const parsed = deleteSaintByPlatformUserQuery.safeParse(req.query);
-      if (!parsed.success) {
-        res.status(400).json({ error: "platformUserId query parameter is required" });
-        return;
-      }
-
       const list = repos.moronList.findByPlatformAndSlug(platform, slug);
       if (list === null) {
         res.status(404).json({ error: "List not found" });
@@ -314,7 +114,7 @@ export function createSaintRoutes(repos: Repositories): Router {
       const auth = (req as AuthenticatedRequest).auth;
       const userId = auth.userId;
       if (userId === undefined) {
-        res.status(401).json({ error: "Not authenticated" });
+        res.status(401).json({ error: "Authentication required" });
         return;
       }
       if (!canWriteList(list, userId)) {
@@ -322,46 +122,54 @@ export function createSaintRoutes(repos: Repositories): Router {
         return;
       }
 
-      const { platformUserId } = parsed.data;
-      const deleted = repos.saintEntry.deleteByPlatformUser(platform, slug, platformUserId);
-
-      if (!deleted) {
-        res.status(404).json({ error: "Saint not found for this platform user" });
+      const parsed = removeSaintsBody.safeParse(req.body);
+      if (!parsed.success) {
+        res.status(400).json({
+          error: "Validation error",
+          details: parsed.error.errors.map((e) => ({
+            path: e.path.join("."),
+            message: e.message,
+          })),
+        });
         return;
       }
 
-      const newVersion = repos.moronList.incrementVersion(platform, slug);
-      repos.changelog.create({
-        listPlatform: platform,
-        listSlug: slug,
-        version: newVersion,
-        action: "REMOVE_SAINT",
-        platformUserId,
-        userId,
-      });
+      // Filter to only those currently sainted
+      const toRemove = parsed.data.filter((entry) =>
+        isCurrentlySainted(repos, platform, slug, entry.platformUserId)
+      );
 
-      res.json({ deleted: true });
+      const skipped = parsed.data.length - toRemove.length;
+
+      if (toRemove.length === 0) {
+        res.json({ removed: 0, skipped });
+        return;
+      }
+
+      // Increment version once for the whole batch
+      const newVersion = repos.moronList.incrementVersion(platform, slug);
+
+      // Write REMOVE_SAINT changelog entries
+      repos.changelog.createBatch(
+        toRemove.map((entry) => ({
+          listPlatform: platform,
+          listSlug: slug,
+          version: newVersion,
+          action: "REMOVE_SAINT" as const,
+          platformUserId: entry.platformUserId,
+          userId,
+        }))
+      );
+
+      // Update saint_count on the list
+      repos.moronList.updateEntryCounts(platform, slug, 0, -toRemove.length);
+
+      res.json({ removed: toRemove.length, skipped });
     } catch (error) {
-      logger.error("Delete saint by platform user error", error);
-      res.status(500).json({ error: "Failed to delete saint" });
+      logger.error("Remove saints error", error);
+      res.status(500).json({ error: "Failed to remove saints" });
     }
   });
 
   return router;
-}
-
-function formatSaint(saint: {
-  id: string;
-  platformUserId: string;
-  reason: string | null;
-  addedById: string;
-  createdAt: Date;
-}): Record<string, unknown> {
-  return {
-    id: saint.id,
-    platformUserId: saint.platformUserId,
-    reason: saint.reason,
-    addedById: saint.addedById,
-    createdAt: saint.createdAt.toISOString(),
-  };
 }

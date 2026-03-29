@@ -8,24 +8,17 @@ import { logger } from "logger";
 import type { Repositories } from "../repositories/interfaces/index.js";
 import type { PersonaClient } from "../services/persona-client.js";
 import { requireAuth, type AuthenticatedRequest } from "../middleware/auth.js";
-import { param } from "../middleware/params.js";
 import { createAuthRoutes } from "./auth.js";
-import { createUserRoutes } from "./users.js";
 import { createMoronRoutes } from "./morons.js";
 import { createEntryRoutes } from "./entries.js";
 import { createSaintRoutes } from "./saints.js";
 import { createInheritanceRoutes } from "./inheritance.js";
 import { createSubscriptionRoutes } from "./subscriptions.js";
-import { createSyncRoutes } from "./sync.js";
 
 export function wireRoutes(app: Express, repos: Repositories, personaClient: PersonaClient): void {
   // Auth routes
   app.use("/auth", createAuthRoutes(repos, personaClient));
   logger.info("Auth routes enabled at /auth/*");
-
-  // User routes
-  app.use("/api/users", createUserRoutes(repos));
-  logger.info("User routes enabled at /api/users/*");
 
   // My stuff routes (inline since they're small)
   // GET /api/me/morons
@@ -96,7 +89,7 @@ export function wireRoutes(app: Express, repos: Repositories, personaClient: Per
 
   logger.info("My routes enabled at /api/me/*");
 
-  // Moron list CRUD + browse routes
+  // Moron list CRUD routes
   app.use("/api/morons", createMoronRoutes(repos));
   logger.info("Moron list routes enabled at /api/morons/*");
 
@@ -110,61 +103,9 @@ export function wireRoutes(app: Express, repos: Repositories, personaClient: Per
 
   // Inheritance routes (nested under morons)
   app.use("/api/morons/:platform/:slug", createInheritanceRoutes(repos));
-  logger.info("Inheritance routes enabled at /api/morons/:platform/:slug/(parents|resolve)");
-
-  // Changelog route (inline since it's a single GET)
-  app.get("/api/morons/:platform/:slug/changelog", (req: Request, res: Response) => {
-    try {
-      const platform = param(req, "platform");
-      const slug = param(req, "slug");
-      if (platform === undefined || slug === undefined) {
-        res.status(400).json({ error: "Platform and slug are required" });
-        return;
-      }
-
-      const list = repos.moronList.findByPlatformAndSlug(platform, slug);
-      if (list === null) {
-        res.status(404).json({ error: "List not found" });
-        return;
-      }
-
-      const sinceVersionRaw = req.query.sinceVersion;
-      const limitRaw = req.query.limit;
-
-      const sinceVersion =
-        typeof sinceVersionRaw === "string" && sinceVersionRaw !== ""
-          ? parseInt(sinceVersionRaw, 10)
-          : undefined;
-      const limit =
-        typeof limitRaw === "string" && limitRaw !== ""
-          ? Math.min(Math.max(parseInt(limitRaw, 10), 1), 1000)
-          : 100;
-
-      const entries = repos.changelog.findByList(platform, slug, sinceVersion, limit);
-
-      res.json({
-        changelog: entries.map((e) => ({
-          id: e.id,
-          version: e.version,
-          action: e.action,
-          platformUserId: e.platformUserId,
-          userId: e.userId,
-          createdAt: e.createdAt.toISOString(),
-        })),
-        currentVersion: list.version,
-      });
-    } catch (error) {
-      logger.error("Get changelog error", error);
-      res.status(500).json({ error: "Failed to get changelog" });
-    }
-  });
-  logger.info("Changelog route enabled at /api/morons/:platform/:slug/changelog");
+  logger.info("Inheritance routes enabled at /api/morons/:platform/:slug/parents");
 
   // Subscription routes
   app.use("/api/subscriptions", createSubscriptionRoutes(repos));
   logger.info("Subscription routes enabled at /api/subscriptions/*");
-
-  // Sync routes (plugin)
-  app.use("/api/v1/sync", createSyncRoutes(repos));
-  logger.info("Sync routes enabled at /api/v1/sync");
 }

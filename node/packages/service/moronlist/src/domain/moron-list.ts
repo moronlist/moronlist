@@ -106,8 +106,6 @@ export function deleteList(
   }
 
   // Clean up all related data
-  repos.moronEntry.deleteAllByList(platform, slug);
-  repos.saintEntry.deleteAllByList(platform, slug);
   repos.changelog.deleteAllByList(platform, slug);
   repos.subscription.deleteAllByList(platform, slug);
   repos.inheritance.deleteAllForList(platform, slug);
@@ -162,34 +160,72 @@ export function forkList(
     forkedFromSlug: sourceSlug,
   });
 
-  // Copy all entries from source
-  const entries = repos.moronEntry.findAllByList(sourcePlatform, sourceSlug);
-  if (entries.length > 0) {
-    repos.moronEntry.createBatch(
-      entries.map((e) => ({
+  // Replay changelog from the source list to compute effective entries and saints.
+  // We read all changelog entries and replay ADD/REMOVE/ADD_SAINT/REMOVE_SAINT
+  // to compute the current effective set of entries and saints.
+  const allChangelog = repos.changelog.findByList(sourcePlatform, sourceSlug, undefined, 100000);
+
+  const effectiveEntries = new Map<string, string | undefined>();
+  const effectiveSaints = new Map<string, string | undefined>();
+
+  for (const entry of allChangelog) {
+    switch (entry.action) {
+      case "ADD":
+        effectiveEntries.set(entry.platformUserId, entry.reason ?? undefined);
+        break;
+      case "REMOVE":
+        effectiveEntries.delete(entry.platformUserId);
+        break;
+      case "ADD_SAINT":
+        effectiveSaints.set(entry.platformUserId, entry.reason ?? undefined);
+        break;
+      case "REMOVE_SAINT":
+        effectiveSaints.delete(entry.platformUserId);
+        break;
+    }
+  }
+
+  // Write ADD changelog entries for the forked list
+  const entryItems = Array.from(effectiveEntries.entries());
+  if (entryItems.length > 0) {
+    const entryVersion = repos.moronList.incrementVersion(sourcePlatform, input.slug);
+    repos.changelog.createBatch(
+      entryItems.map(([platformUserId, reason]) => ({
         listPlatform: sourcePlatform,
         listSlug: input.slug,
-        platformUserId: e.platformUserId,
-        displayName: e.displayName ?? undefined,
-        reason: e.reason ?? undefined,
-        addedById: input.userId,
+        version: entryVersion,
+        action: "ADD" as const,
+        platformUserId,
+        userId: input.userId,
+        reason,
       }))
     );
   }
 
-  // Copy all saints from source
-  const saints = repos.saintEntry.findAllByList(sourcePlatform, sourceSlug);
-  if (saints.length > 0) {
-    repos.saintEntry.createBatch(
-      saints.map((s) => ({
+  // Write ADD_SAINT changelog entries for the forked list
+  const saintItems = Array.from(effectiveSaints.entries());
+  if (saintItems.length > 0) {
+    const saintVersion = repos.moronList.incrementVersion(sourcePlatform, input.slug);
+    repos.changelog.createBatch(
+      saintItems.map(([platformUserId, reason]) => ({
         listPlatform: sourcePlatform,
         listSlug: input.slug,
-        platformUserId: s.platformUserId,
-        reason: s.reason ?? undefined,
-        addedById: input.userId,
+        version: saintVersion,
+        action: "ADD_SAINT" as const,
+        platformUserId,
+        userId: input.userId,
+        reason,
       }))
     );
   }
+
+  // Update entry_count and saint_count on the forked list
+  repos.moronList.updateEntryCounts(
+    sourcePlatform,
+    input.slug,
+    entryItems.length,
+    saintItems.length
+  );
 
   // Copy inheritance
   const parents = repos.inheritance.findParents(sourcePlatform, sourceSlug);

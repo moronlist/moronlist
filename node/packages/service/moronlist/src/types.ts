@@ -5,9 +5,8 @@
 import type {
   UserDbRow,
   MoronListDbRow,
-  MoronEntryDbRow,
-  SaintEntryDbRow,
   ChangelogDbRow,
+  FlushStateDbRow,
   SubscriptionDbRow,
 } from "moronlist-db";
 
@@ -82,31 +81,12 @@ export type MoronList = {
   description: string | null;
   visibility: Visibility;
   version: number;
+  entryCount: number;
+  saintCount: number;
   forkedFromPlatform: string | null;
   forkedFromSlug: string | null;
   createdAt: Date;
   updatedAt: Date;
-};
-
-export type MoronEntry = {
-  id: string;
-  listPlatform: string;
-  listSlug: string;
-  platformUserId: string;
-  displayName: string | null;
-  reason: string | null;
-  addedById: string;
-  createdAt: Date;
-};
-
-export type SaintEntry = {
-  id: string;
-  listPlatform: string;
-  listSlug: string;
-  platformUserId: string;
-  reason: string | null;
-  addedById: string;
-  createdAt: Date;
 };
 
 export type ChangelogAction = "ADD" | "REMOVE" | "ADD_SAINT" | "REMOVE_SAINT";
@@ -119,7 +99,16 @@ export type ChangelogEntry = {
   action: ChangelogAction;
   platformUserId: string;
   userId: string;
+  reason: string | null;
+  flushVersion: number | null;
   createdAt: Date;
+};
+
+export type FlushState = {
+  listPlatform: string;
+  listSlug: string;
+  lastFlushedVersion: number;
+  lastFlushedAt: Date | null;
 };
 
 export type Subscription = {
@@ -161,35 +150,12 @@ export function mapMoronListFromDb(row: MoronListDbRow): MoronList {
     description: row.description,
     visibility: row.visibility as Visibility,
     version: row.version,
+    entryCount: row.entry_count,
+    saintCount: row.saint_count,
     forkedFromPlatform: row.forked_from_platform,
     forkedFromSlug: row.forked_from_slug,
     createdAt: new Date(row.created_at),
     updatedAt: new Date(row.updated_at),
-  };
-}
-
-export function mapMoronEntryFromDb(row: MoronEntryDbRow): MoronEntry {
-  return {
-    id: row.id,
-    listPlatform: row.list_platform,
-    listSlug: row.list_slug,
-    platformUserId: row.platform_user_id,
-    displayName: row.display_name,
-    reason: row.reason,
-    addedById: row.added_by_id,
-    createdAt: new Date(row.created_at),
-  };
-}
-
-export function mapSaintEntryFromDb(row: SaintEntryDbRow): SaintEntry {
-  return {
-    id: row.id,
-    listPlatform: row.list_platform,
-    listSlug: row.list_slug,
-    platformUserId: row.platform_user_id,
-    reason: row.reason,
-    addedById: row.added_by_id,
-    createdAt: new Date(row.created_at),
   };
 }
 
@@ -202,7 +168,18 @@ export function mapChangelogFromDb(row: ChangelogDbRow): ChangelogEntry {
     action: row.action as ChangelogAction,
     platformUserId: row.platform_user_id,
     userId: row.user_id,
+    reason: row.reason,
+    flushVersion: row.flush_version,
     createdAt: new Date(row.created_at),
+  };
+}
+
+export function mapFlushStateFromDb(row: FlushStateDbRow): FlushState {
+  return {
+    listPlatform: row.list_platform,
+    listSlug: row.list_slug,
+    lastFlushedVersion: row.last_flushed_version,
+    lastFlushedAt: row.last_flushed_at !== null ? new Date(row.last_flushed_at) : null,
   };
 }
 

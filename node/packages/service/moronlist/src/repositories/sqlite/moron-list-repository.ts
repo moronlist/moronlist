@@ -8,7 +8,7 @@ import {
   executeUpdate,
   executeDelete,
 } from "@tinqerjs/better-sqlite3-adapter";
-import { schema, type SQLiteDatabase, type MoronListDbRow } from "moronlist-db";
+import { schema, type SQLiteDatabase } from "moronlist-db";
 import type {
   IMoronListRepository,
   CreateMoronListData,
@@ -33,6 +33,8 @@ function selectAll(db: SQLiteDatabase, platform: string, slug: string): MoronLis
           description: l.description,
           visibility: l.visibility,
           version: l.version,
+          entry_count: l.entry_count,
+          saint_count: l.saint_count,
           forked_from_platform: l.forked_from_platform,
           forked_from_slug: l.forked_from_slug,
           created_at: l.created_at,
@@ -70,6 +72,8 @@ function findByOwnerId(db: SQLiteDatabase, ownerId: string): MoronList[] {
           description: l.description,
           visibility: l.visibility,
           version: l.version,
+          entry_count: l.entry_count,
+          saint_count: l.saint_count,
           forked_from_platform: l.forked_from_platform,
           forked_from_slug: l.forked_from_slug,
           created_at: l.created_at,
@@ -81,19 +85,14 @@ function findByOwnerId(db: SQLiteDatabase, ownerId: string): MoronList[] {
   return rows.map(mapMoronListFromDb);
 }
 
-function findByPlatform(
-  db: SQLiteDatabase,
-  platform: string,
-  offset: number,
-  limit: number
-): MoronList[] {
+function findAllPublic(db: SQLiteDatabase): MoronList[] {
   const rows = executeSelect(
     db,
     schema,
     (q, p) =>
       q
         .from("moron_list")
-        .where((l) => l.platform === p.platform && l.visibility === p.visibility)
+        .where((l) => l.visibility === p.visibility)
         .select((l) => ({
           platform: l.platform,
           slug: l.slug,
@@ -102,93 +101,14 @@ function findByPlatform(
           description: l.description,
           visibility: l.visibility,
           version: l.version,
+          entry_count: l.entry_count,
+          saint_count: l.saint_count,
           forked_from_platform: l.forked_from_platform,
           forked_from_slug: l.forked_from_slug,
           created_at: l.created_at,
           updated_at: l.updated_at,
-        }))
-        .skip(p.offset)
-        .take(p.limit),
-    { platform, visibility: "public", offset, limit }
-  );
-
-  return rows.map(mapMoronListFromDb);
-}
-
-function countByPlatform(db: SQLiteDatabase, platform: string): number {
-  const rows = executeSelect(
-    db,
-    schema,
-    (q, p) =>
-      q
-        .from("moron_list")
-        .where((l) => l.platform === p.platform && l.visibility === p.visibility)
-        .groupBy(() => true)
-        .select((g) => ({
-          count: g.count(),
         })),
-    { platform, visibility: "public" }
-  );
-
-  return rows[0]?.count ?? 0;
-}
-
-function searchByPlatform(
-  db: SQLiteDatabase,
-  platform: string,
-  query: string,
-  offset: number,
-  limit: number
-): MoronList[] {
-  // Raw SQL exception: Tinqer does not support LIKE operator
-  const pattern = `%${query}%`;
-  const rows = db
-    .prepare(
-      `SELECT platform, slug, owner_id, name, description, visibility, version,
-              forked_from_platform, forked_from_slug, created_at, updated_at
-       FROM moron_list
-       WHERE platform = :platform
-         AND visibility = :visibility
-         AND (name LIKE :pattern OR slug LIKE :pattern)
-       ORDER BY created_at DESC
-       LIMIT :limit OFFSET :offset`
-    )
-    .all({ platform, visibility: "public", pattern, offset, limit }) as MoronListDbRow[];
-
-  return rows.map(mapMoronListFromDb);
-}
-
-function findPopularByPlatform(
-  db: SQLiteDatabase,
-  platform: string,
-  offset: number,
-  limit: number
-): MoronList[] {
-  // Popular = public lists sorted by version (higher version = more activity)
-  const rows = executeSelect(
-    db,
-    schema,
-    (q, p) =>
-      q
-        .from("moron_list")
-        .where((l) => l.platform === p.platform && l.visibility === p.visibility)
-        .select((l) => ({
-          platform: l.platform,
-          slug: l.slug,
-          owner_id: l.owner_id,
-          name: l.name,
-          description: l.description,
-          visibility: l.visibility,
-          version: l.version,
-          forked_from_platform: l.forked_from_platform,
-          forked_from_slug: l.forked_from_slug,
-          created_at: l.created_at,
-          updated_at: l.updated_at,
-        }))
-        .orderByDescending((l) => l.version)
-        .skip(p.offset)
-        .take(p.limit),
-    { platform, visibility: "public", offset, limit }
+    { visibility: "public" }
   );
 
   return rows.map(mapMoronListFromDb);
@@ -209,6 +129,8 @@ function create(db: SQLiteDatabase, data: CreateMoronListData): MoronList {
         description: p.description,
         visibility: p.visibility,
         version: p.version,
+        entry_count: p.entryCount,
+        saint_count: p.saintCount,
         forked_from_platform: p.forkedFromPlatform,
         forked_from_slug: p.forkedFromSlug,
         created_at: p.createdAt,
@@ -222,6 +144,8 @@ function create(db: SQLiteDatabase, data: CreateMoronListData): MoronList {
       description: data.description ?? (null as string | null),
       visibility: data.visibility,
       version: 0,
+      entryCount: 0,
+      saintCount: 0,
       forkedFromPlatform: data.forkedFromPlatform ?? (null as string | null),
       forkedFromSlug: data.forkedFromSlug ?? (null as string | null),
       createdAt: now,
@@ -300,6 +224,24 @@ function incrementVersion(db: SQLiteDatabase, platform: string, slug: string): n
   return newVersion;
 }
 
+function updateEntryCounts(
+  db: SQLiteDatabase,
+  platform: string,
+  slug: string,
+  entryDelta: number,
+  saintDelta: number
+): void {
+  const now = new Date().toISOString();
+  // Raw SQL exception: Tinqer does not support arithmetic expressions in SET
+  db.prepare(
+    `UPDATE moron_list
+     SET entry_count = entry_count + :entryDelta,
+         saint_count = saint_count + :saintDelta,
+         updated_at = :now
+     WHERE platform = :platform AND slug = :slug`
+  ).run({ entryDelta, saintDelta, now, platform, slug });
+}
+
 function deleteList(db: SQLiteDatabase, platform: string, slug: string): boolean {
   const deleted = executeDelete(
     db,
@@ -316,15 +258,12 @@ export function createMoronListRepository(db: SQLiteDatabase): IMoronListReposit
   return {
     findByPlatformAndSlug: (platform, slug) => findByPlatformAndSlug(db, platform, slug),
     findByOwnerId: (ownerId) => findByOwnerId(db, ownerId),
-    findByPlatform: (platform, offset, limit) => findByPlatform(db, platform, offset, limit),
-    countByPlatform: (platform) => countByPlatform(db, platform),
-    searchByPlatform: (platform, query, offset, limit) =>
-      searchByPlatform(db, platform, query, offset, limit),
-    findPopularByPlatform: (platform, offset, limit) =>
-      findPopularByPlatform(db, platform, offset, limit),
+    findAllPublic: () => findAllPublic(db),
     create: (data) => create(db, data),
     update: (platform, slug, data) => update(db, platform, slug, data),
     incrementVersion: (platform, slug) => incrementVersion(db, platform, slug),
+    updateEntryCounts: (platform, slug, entryDelta, saintDelta) =>
+      updateEntryCounts(db, platform, slug, entryDelta, saintDelta),
     delete: (platform, slug) => deleteList(db, platform, slug),
   };
 }

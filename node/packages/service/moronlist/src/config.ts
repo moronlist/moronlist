@@ -32,6 +32,7 @@ export const config = {
   server: {
     host: required("MORONLIST_SERVER_HOST"),
     port: optionalInt("MORONLIST_SERVER_PORT", 4100),
+    publicUrl: required("MORONLIST_PUBLIC_URL"),
     corsOrigins: (process.env.MORONLIST_CORS_ORIGINS ?? "")
       .split(",")
       .map((o) => o.trim())
@@ -66,6 +67,12 @@ export const config = {
   persona: {
     serviceUrl: required("PERSONA_URL"),
     internalSecret: required("PERSONA_INTERNAL_SECRET"),
+  },
+
+  // Output directories for static file generation
+  output: {
+    dataDir: optional("DATA_OUTPUT_DIR", "./output/data"),
+    siteDir: optional("SITE_OUTPUT_DIR", "./output/site"),
   },
 };
 

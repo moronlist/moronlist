@@ -241,4 +241,43 @@ describe("Auth routes", () => {
         .expect(400);
     });
   });
+
+  // =========================================
+  // GET /auth/login
+  // =========================================
+
+  describe("GET /auth/login", () => {
+    it("redirects to Persona OAuth", async () => {
+      const res = await request(getApp()).get("/auth/login").expect(302);
+
+      expect(res.headers.location).to.include("/auth/google");
+    });
+  });
+
+  // =========================================
+  // GET /auth/callback
+  // =========================================
+
+  describe("GET /auth/callback", () => {
+    it("serves HTML page", async () => {
+      const res = await request(getApp()).get("/auth/callback").expect(200);
+
+      expect(res.text).to.include("Signed in");
+      expect(res.headers["content-type"]).to.include("html");
+    });
+
+    it("serves HTML with token in fragment when access_token cookie is present", async () => {
+      const { token } = createTestUser();
+
+      const res = await request(getApp())
+        .get("/auth/callback")
+        .set("Cookie", `access_token=${token}`)
+        .expect(200);
+
+      expect(res.headers["content-type"]).to.include("html");
+      expect(res.text).to.include("Signed in");
+      expect(res.text).to.include("window.location.hash");
+      expect(res.text).to.include("token=");
+    });
+  });
 });

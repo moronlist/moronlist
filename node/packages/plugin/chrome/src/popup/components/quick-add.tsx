@@ -1,14 +1,16 @@
-import { useState, useCallback } from "react";
-import type { Subscription, Result } from "../../lib/api-client.js";
+import { useState, useCallback, useEffect } from "react";
+import type { Result, MoronList } from "../../lib/api-client.js";
 
 type QuickAddProps = {
-  subscriptions: Subscription[];
+  myLists: MoronList[];
+  pendingUsername: string | null;
+  onClearPending: () => void;
   onAdded: () => void;
 };
 
 type AddMode = "moron" | "saint";
 
-export function QuickAdd({ subscriptions, onAdded }: QuickAddProps) {
+export function QuickAdd({ myLists, pendingUsername, onClearPending, onAdded }: QuickAddProps) {
   const [username, setUsername] = useState("");
   const [reason, setReason] = useState("");
   const [selectedListId, setSelectedListId] = useState<string>("");
@@ -16,12 +18,27 @@ export function QuickAdd({ subscriptions, onAdded }: QuickAddProps) {
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
 
-  const selectedSub = subscriptions.find((s) => s.id === selectedListId);
+  // Auto-fill pending username
+  useEffect(() => {
+    if (pendingUsername !== null) {
+      setUsername(pendingUsername.replace(/^@/, ""));
+      onClearPending();
+    }
+  }, [pendingUsername, onClearPending]);
+
+  // Auto-select first list if none selected
+  useEffect(() => {
+    if (selectedListId === "" && myLists.length > 0 && myLists[0] !== undefined) {
+      setSelectedListId(myLists[0].id);
+    }
+  }, [myLists, selectedListId]);
+
+  const selectedList = myLists.find((l) => l.id === selectedListId);
 
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault();
-      if (selectedSub === undefined || username.trim().length === 0) {
+      if (selectedList === undefined || username.trim().length === 0) {
         return;
       }
 
@@ -32,8 +49,8 @@ export function QuickAdd({ subscriptions, onAdded }: QuickAddProps) {
         const messageType = mode === "moron" ? "ADD_ENTRY" : "ADD_SAINT";
         const result = (await chrome.runtime.sendMessage({
           type: messageType,
-          platform: selectedSub.platform,
-          slug: selectedSub.slug,
+          platform: selectedList.platform,
+          slug: selectedList.slug,
           platformUserId: username.trim().replace(/^@/, ""),
           reason: reason.trim().length > 0 ? reason.trim() : undefined,
         })) as Result<unknown>;
@@ -56,11 +73,15 @@ export function QuickAdd({ subscriptions, onAdded }: QuickAddProps) {
         setSubmitting(false);
       }
     },
-    [selectedSub, username, reason, mode, onAdded]
+    [selectedList, username, reason, mode, onAdded]
   );
 
-  if (subscriptions.length === 0) {
-    return null;
+  if (myLists.length === 0) {
+    return (
+      <div className="px-4 py-3 border-b border-gray-200 bg-white">
+        <p className="text-xs text-gray-400">Create a list first to start adding entries.</p>
+      </div>
+    );
   }
 
   return (
@@ -75,9 +96,9 @@ export function QuickAdd({ subscriptions, onAdded }: QuickAddProps) {
             className="w-full text-sm border border-gray-300 rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-moron-500 bg-white"
           >
             <option value="">Select a list...</option>
-            {subscriptions.map((sub) => (
-              <option key={sub.id} value={sub.id}>
-                {sub.name} ({sub.platform}/{sub.slug})
+            {myLists.map((list) => (
+              <option key={list.id} value={list.id}>
+                {list.name} ({list.platform}/{list.slug})
               </option>
             ))}
           </select>

@@ -8,10 +8,9 @@ import type {
   UserRole,
   MoronList,
   Visibility,
-  MoronEntry,
-  SaintEntry,
   ChangelogEntry,
   ChangelogAction,
+  FlushState,
   Subscription,
   InheritanceLink,
 } from "../../types.js";
@@ -56,67 +55,12 @@ export type UpdateMoronListData = {
 export type IMoronListRepository = {
   findByPlatformAndSlug(platform: string, slug: string): MoronList | null;
   findByOwnerId(ownerId: string): MoronList[];
-  findByPlatform(platform: string, offset: number, limit: number): MoronList[];
-  countByPlatform(platform: string): number;
-  searchByPlatform(platform: string, query: string, offset: number, limit: number): MoronList[];
-  findPopularByPlatform(platform: string, offset: number, limit: number): MoronList[];
+  findAllPublic(): MoronList[];
   create(data: CreateMoronListData): MoronList;
   update(platform: string, slug: string, data: UpdateMoronListData): MoronList;
   incrementVersion(platform: string, slug: string): number;
+  updateEntryCounts(platform: string, slug: string, entryDelta: number, saintDelta: number): void;
   delete(platform: string, slug: string): boolean;
-};
-
-// Moron Entry Repository
-export type CreateMoronEntryData = {
-  listPlatform: string;
-  listSlug: string;
-  platformUserId: string;
-  displayName?: string;
-  reason?: string;
-  addedById: string;
-};
-
-export type IMoronEntryRepository = {
-  findById(id: string): MoronEntry | null;
-  findByListAndPlatformUser(
-    platform: string,
-    slug: string,
-    platformUserId: string
-  ): MoronEntry | null;
-  findByList(platform: string, slug: string, offset: number, limit: number): MoronEntry[];
-  countByList(platform: string, slug: string): number;
-  findAllByList(platform: string, slug: string): MoronEntry[];
-  create(data: CreateMoronEntryData): MoronEntry;
-  createBatch(entries: CreateMoronEntryData[]): MoronEntry[];
-  deleteById(id: string): boolean;
-  deleteByPlatformUser(platform: string, slug: string, platformUserId: string): boolean;
-  deleteAllByList(platform: string, slug: string): number;
-};
-
-// Saint Entry Repository
-export type CreateSaintEntryData = {
-  listPlatform: string;
-  listSlug: string;
-  platformUserId: string;
-  reason?: string;
-  addedById: string;
-};
-
-export type ISaintEntryRepository = {
-  findById(id: string): SaintEntry | null;
-  findByListAndPlatformUser(
-    platform: string,
-    slug: string,
-    platformUserId: string
-  ): SaintEntry | null;
-  findByList(platform: string, slug: string, offset: number, limit: number): SaintEntry[];
-  countByList(platform: string, slug: string): number;
-  findAllByList(platform: string, slug: string): SaintEntry[];
-  create(data: CreateSaintEntryData): SaintEntry;
-  createBatch(entries: CreateSaintEntryData[]): SaintEntry[];
-  deleteById(id: string): boolean;
-  deleteByPlatformUser(platform: string, slug: string, platformUserId: string): boolean;
-  deleteAllByList(platform: string, slug: string): number;
 };
 
 // Inheritance Repository
@@ -139,6 +83,7 @@ export type CreateChangelogData = {
   action: ChangelogAction;
   platformUserId: string;
   userId: string;
+  reason?: string;
 };
 
 export type IChangelogRepository = {
@@ -148,9 +93,23 @@ export type IChangelogRepository = {
     sinceVersion: number | undefined,
     limit: number
   ): ChangelogEntry[];
+  findUnflushed(platform: string, slug: string): ChangelogEntry[];
+  findListsWithUnflushed(): { platform: string; slug: string }[];
+  findLatestActionForUser(
+    platform: string,
+    slug: string,
+    platformUserId: string
+  ): ChangelogEntry | null;
   create(data: CreateChangelogData): ChangelogEntry;
   createBatch(entries: CreateChangelogData[]): ChangelogEntry[];
+  markFlushed(platform: string, slug: string, upToVersion: number): void;
   deleteAllByList(platform: string, slug: string): number;
+};
+
+// Flush State Repository
+export type IFlushStateRepository = {
+  getState(platform: string, slug: string): FlushState | null;
+  updateState(platform: string, slug: string, version: number): void;
 };
 
 // Subscription Repository
@@ -168,9 +127,8 @@ export type ISubscriptionRepository = {
 export type Repositories = {
   user: IUserRepository;
   moronList: IMoronListRepository;
-  moronEntry: IMoronEntryRepository;
-  saintEntry: ISaintEntryRepository;
   inheritance: IInheritanceRepository;
   changelog: IChangelogRepository;
+  flushState: IFlushStateRepository;
   subscription: ISubscriptionRepository;
 };

@@ -143,6 +143,9 @@ vite.config.ts.timestamp-*
 # Data directories
 data/
 
+# Cron output directories
+output/
+
 # Test data
 .tests/
 .analysis/
