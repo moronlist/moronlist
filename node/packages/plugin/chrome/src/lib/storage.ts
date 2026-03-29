@@ -1,5 +1,5 @@
-const DEFAULT_API_URL = "https://api.moronlist.com";
-const DEFAULT_DATA_URL = "https://data.moronlist.com";
+const DEFAULT_API_URL = import.meta.env.VITE_API_URL as string;
+const DEFAULT_DATA_URL = import.meta.env.VITE_DATA_URL as string;
 
 export type OwnedList = {
   id: string;

@@ -314,7 +314,11 @@ chrome.runtime.onMessage.addListener(
 );
 
 async function initialize(): Promise<void> {
-  await loadBlockedSets();
+  // Load blocked sets with a timeout — don't let a hung service worker
+  // prevent tweets from showing. If it fails, all tweets show (nothing blocked).
+  const timeout = new Promise<void>((resolve) => setTimeout(resolve, 2000));
+  await Promise.race([loadBlockedSets(), timeout]);
+
   processTweets();
   handleProfilePage();
   setupMutationObserver();

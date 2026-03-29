@@ -42,11 +42,20 @@ function startServer(): void {
       app.set("trust proxy", 1);
     }
 
-    // CORS
-    const allowedOrigins = [...config.server.corsOrigins];
+    // CORS — allow configured origins + any Chrome extension
     app.use(
       cors({
-        origin: allowedOrigins.length > 0 ? allowedOrigins : true,
+        origin: (origin, callback) => {
+          if (
+            origin === undefined ||
+            config.server.corsOrigins.includes(origin) ||
+            origin.startsWith("chrome-extension://")
+          ) {
+            callback(null, true);
+          } else {
+            callback(null, false);
+          }
+        },
         credentials: true,
       })
     );
