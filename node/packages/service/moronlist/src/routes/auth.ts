@@ -2,11 +2,15 @@
  * Auth routes (Persona service integration)
  *
  * Routes:
+ * - GET /auth/login - Redirect to Persona OAuth
+ * - GET /auth/callback - OAuth callback (serves signed-in page)
  * - GET /auth/me - Get current user
  * - GET /auth/pending-profile - Check if user needs onboarding
  * - POST /auth/complete-onboarding - Create user and link to identity
  */
 
+import { dirname, join } from "path";
+import { fileURLToPath } from "url";
 import { Router, type Request, type Response, type CookieOptions } from "express";
 import { logger } from "logger";
 import type { Repositories } from "../repositories/interfaces/index.js";
@@ -14,6 +18,9 @@ import type { PersonaClient } from "../services/persona-client.js";
 import { extractAccessToken, verifyPersonaToken } from "../middleware/auth.js";
 import { config } from "../config.js";
 import { completeOnboardingBody } from "../validation/schemas.js";
+
+const currentDir = dirname(fileURLToPath(import.meta.url));
+const callbackHtmlPath = join(currentDir, "auth-callback.html");
 
 function extractCookieDomain(hostname: string): string | undefined {
   if (hostname === "localhost" || hostname === "127.0.0.1") {
@@ -40,10 +47,77 @@ function isRootUserEmail(email: string): boolean {
   return config.auth.rootUserEmails.includes(email.toLowerCase());
 }
 
+function buildCallbackHtml(token: string): string {
+  // Escape the token for safe embedding in a script tag.
+  // JSON.stringify handles quotes and special characters.
+  const safeToken = JSON.stringify(token);
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MoronList - Signed In</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background-color: #1a1a2e;
+      color: #e0e0e0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+    }
+    .container { text-align: center; padding: 2rem; }
+    h1 { font-size: 1.5rem; font-weight: 600; margin-bottom: 0.75rem; color: #ffffff; }
+    p { font-size: 1rem; color: #a0a0b0; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Signed in successfully!</h1>
+    <p>This tab will close automatically.</p>
+  </div>
+  <script>window.location.hash = "token=" + ${safeToken};</script>
+</body>
+</html>`;
+}
+
 export function createAuthRoutes(repos: Repositories, personaClient: PersonaClient): Router {
   const router = Router();
   const cookieDomain = config.auth.cookieDomain ?? extractCookieDomain(config.server.host);
   const cookieOptions = getCookieOptions(config.isProduction, cookieDomain);
+
+  // GET /auth/login
+  // Redirects the browser to Persona's Google OAuth flow.
+  // After OAuth completes, Persona redirects back to /auth/callback.
+  router.get("/login", (_req: Request, res: Response) => {
+    const callbackUrl = `${config.server.publicUrl}/auth/callback`;
+    const personaOAuthUrl = `${config.persona.serviceUrl}/auth/google?redirect=${encodeURIComponent(callbackUrl)}`;
+    res.redirect(personaOAuthUrl);
+  });
+
+  // GET /auth/callback
+  // Persona redirects here after OAuth. Persona sets cookies on redirect.
+  // If we can read access_token from the cookie, serve HTML that places
+  // the token in the URL fragment so the Chrome plugin can read it from
+  // the tab URL. Otherwise, serve the static HTML page as-is.
+  router.get("/callback", (req: Request, res: Response) => {
+    const cookies =
+      typeof req.cookies === "object"
+        ? (req.cookies as Record<string, string>)
+        : {};
+    const accessToken = cookies.access_token;
+
+    if (typeof accessToken === "string" && accessToken !== "") {
+      // Serve the callback page with an inline script that sets the fragment.
+      // The Chrome plugin watches chrome.tabs.onUpdated for the #token= fragment.
+      res.type("html").send(buildCallbackHtml(accessToken));
+      return;
+    }
+
+    res.sendFile(callbackHtmlPath);
+  });
 
   // GET /auth/pending-profile
   router.get("/pending-profile", (req: Request, res: Response) => {

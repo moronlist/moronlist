@@ -140,6 +140,7 @@ export function createSaintRoutes(repos: Repositories): Router {
         action: "ADD_SAINT",
         platformUserId: parsed.data.platformUserId,
         userId,
+        reason: parsed.data.reason,
       });
 
       res.status(201).json({ saint: formatSaint(saint) });
@@ -208,6 +209,12 @@ export function createSaintRoutes(repos: Repositories): Router {
         }))
       );
 
+      // Build a map of platformUserId to reason from the new saints
+      const reasonByPlatformUserId = new Map<string, string | undefined>();
+      for (const s of newSaints) {
+        reasonByPlatformUserId.set(s.platformUserId, s.reason);
+      }
+
       const newVersion = repos.moronList.incrementVersion(platform, slug);
       repos.changelog.createBatch(
         created.map((saint) => ({
@@ -217,6 +224,7 @@ export function createSaintRoutes(repos: Repositories): Router {
           action: "ADD_SAINT" as const,
           platformUserId: saint.platformUserId,
           userId,
+          reason: reasonByPlatformUserId.get(saint.platformUserId),
         }))
       );
 

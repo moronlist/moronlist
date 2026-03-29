@@ -12,6 +12,7 @@ import type {
   SaintEntry,
   ChangelogEntry,
   ChangelogAction,
+  FlushState,
   Subscription,
   InheritanceLink,
 } from "../../types.js";
@@ -139,6 +140,7 @@ export type CreateChangelogData = {
   action: ChangelogAction;
   platformUserId: string;
   userId: string;
+  reason?: string;
 };
 
 export type IChangelogRepository = {
@@ -148,9 +150,22 @@ export type IChangelogRepository = {
     sinceVersion: number | undefined,
     limit: number
   ): ChangelogEntry[];
+  findUnflushed(platform: string, slug: string): ChangelogEntry[];
+  findLatestActionForUser(
+    platform: string,
+    slug: string,
+    platformUserId: string
+  ): ChangelogEntry | null;
   create(data: CreateChangelogData): ChangelogEntry;
   createBatch(entries: CreateChangelogData[]): ChangelogEntry[];
+  markFlushed(platform: string, slug: string, upToVersion: number): void;
   deleteAllByList(platform: string, slug: string): number;
+};
+
+// Flush State Repository
+export type IFlushStateRepository = {
+  getState(platform: string, slug: string): FlushState | null;
+  updateState(platform: string, slug: string, version: number): void;
 };
 
 // Subscription Repository
@@ -172,5 +187,6 @@ export type Repositories = {
   saintEntry: ISaintEntryRepository;
   inheritance: IInheritanceRepository;
   changelog: IChangelogRepository;
+  flushState: IFlushStateRepository;
   subscription: ISubscriptionRepository;
 };

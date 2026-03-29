@@ -137,6 +137,7 @@ export function createEntryRoutes(repos: Repositories): Router {
         action: "ADD",
         platformUserId: parsed.data.platformUserId,
         userId,
+        reason: parsed.data.reason,
       });
 
       res.status(201).json({ entry: formatEntry(entry) });
@@ -207,6 +208,12 @@ export function createEntryRoutes(repos: Repositories): Router {
       );
 
       // Increment version once and log changelog for each entry
+      // Build a map of platformUserId to reason from the new entries
+      const reasonByPlatformUserId = new Map<string, string | undefined>();
+      for (const e of newEntries) {
+        reasonByPlatformUserId.set(e.platformUserId, e.reason);
+      }
+
       const newVersion = repos.moronList.incrementVersion(platform, slug);
       repos.changelog.createBatch(
         created.map((entry) => ({
@@ -216,6 +223,7 @@ export function createEntryRoutes(repos: Repositories): Router {
           action: "ADD" as const,
           platformUserId: entry.platformUserId,
           userId,
+          reason: reasonByPlatformUserId.get(entry.platformUserId),
         }))
       );
 

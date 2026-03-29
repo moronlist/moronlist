@@ -29,5 +29,6 @@ export type {
   SaintEntryDbRow,
   MoronListInheritanceDbRow,
   ChangelogDbRow,
+  FlushStateDbRow,
   SubscriptionDbRow,
 } from "./types.js";

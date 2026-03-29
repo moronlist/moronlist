@@ -37,6 +37,7 @@ process.env.NODE_ENV = "test";
 process.env.PERSONA_JWT_SECRET = TEST_JWT_SECRET;
 process.env.MORONLIST_SERVER_HOST = "localhost";
 process.env.MORONLIST_SERVER_PORT = "0";
+process.env.MORONLIST_PUBLIC_URL = "http://localhost:4100";
 process.env.MORONLIST_DATA_DIR = "/tmp/moronlist-test";
 process.env.PERSONA_URL = "http://localhost:19999";
 process.env.PERSONA_INTERNAL_SECRET = "test-internal-secret";

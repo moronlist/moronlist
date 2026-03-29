@@ -33,6 +33,8 @@ function selectAll(db: SQLiteDatabase, platform: string, slug: string): MoronLis
           description: l.description,
           visibility: l.visibility,
           version: l.version,
+          entry_count: l.entry_count,
+          saint_count: l.saint_count,
           forked_from_platform: l.forked_from_platform,
           forked_from_slug: l.forked_from_slug,
           created_at: l.created_at,
@@ -70,6 +72,8 @@ function findByOwnerId(db: SQLiteDatabase, ownerId: string): MoronList[] {
           description: l.description,
           visibility: l.visibility,
           version: l.version,
+          entry_count: l.entry_count,
+          saint_count: l.saint_count,
           forked_from_platform: l.forked_from_platform,
           forked_from_slug: l.forked_from_slug,
           created_at: l.created_at,
@@ -102,6 +106,8 @@ function findByPlatform(
           description: l.description,
           visibility: l.visibility,
           version: l.version,
+          entry_count: l.entry_count,
+          saint_count: l.saint_count,
           forked_from_platform: l.forked_from_platform,
           forked_from_slug: l.forked_from_slug,
           created_at: l.created_at,
@@ -145,6 +151,7 @@ function searchByPlatform(
   const rows = db
     .prepare(
       `SELECT platform, slug, owner_id, name, description, visibility, version,
+              entry_count, saint_count,
               forked_from_platform, forked_from_slug, created_at, updated_at
        FROM moron_list
        WHERE platform = :platform
@@ -180,6 +187,8 @@ function findPopularByPlatform(
           description: l.description,
           visibility: l.visibility,
           version: l.version,
+          entry_count: l.entry_count,
+          saint_count: l.saint_count,
           forked_from_platform: l.forked_from_platform,
           forked_from_slug: l.forked_from_slug,
           created_at: l.created_at,
@@ -209,6 +218,8 @@ function create(db: SQLiteDatabase, data: CreateMoronListData): MoronList {
         description: p.description,
         visibility: p.visibility,
         version: p.version,
+        entry_count: p.entryCount,
+        saint_count: p.saintCount,
         forked_from_platform: p.forkedFromPlatform,
         forked_from_slug: p.forkedFromSlug,
         created_at: p.createdAt,
@@ -222,6 +233,8 @@ function create(db: SQLiteDatabase, data: CreateMoronListData): MoronList {
       description: data.description ?? (null as string | null),
       visibility: data.visibility,
       version: 0,
+      entryCount: 0,
+      saintCount: 0,
       forkedFromPlatform: data.forkedFromPlatform ?? (null as string | null),
       forkedFromSlug: data.forkedFromSlug ?? (null as string | null),
       createdAt: now,

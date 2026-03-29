@@ -254,6 +254,8 @@ export function insertTestMoronList(
         description: p.description,
         visibility: p.visibility,
         version: p.version,
+        entry_count: p.entryCount,
+        saint_count: p.saintCount,
         forked_from_platform: p.forkedFromPlatform,
         forked_from_slug: p.forkedFromSlug,
         created_at: p.createdAt,
@@ -267,6 +269,8 @@ export function insertTestMoronList(
       description: data.description ?? null,
       visibility: data.visibility ?? "public",
       version: data.version ?? 0,
+      entryCount: 0,
+      saintCount: 0,
       forkedFromPlatform: data.forked_from_platform ?? null,
       forkedFromSlug: data.forked_from_slug ?? null,
       createdAt: now,
@@ -425,6 +429,7 @@ export function insertTestChangelog(
     action: string;
     platform_user_id: string;
     user_id: string;
+    reason?: string;
   }
 ): void {
   const now = new Date().toISOString();
@@ -441,6 +446,8 @@ export function insertTestChangelog(
         action: p.action,
         platform_user_id: p.platformUserId,
         user_id: p.userId,
+        reason: p.reason,
+        flush_version: p.flushVersion,
         created_at: p.createdAt,
       }),
     {
@@ -451,6 +458,8 @@ export function insertTestChangelog(
       action: data.action,
       platformUserId: data.platform_user_id,
       userId: data.user_id,
+      reason: data.reason ?? null,
+      flushVersion: null,
       createdAt: now,
     }
   );

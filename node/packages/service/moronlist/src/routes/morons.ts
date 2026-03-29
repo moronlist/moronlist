@@ -6,7 +6,7 @@
  * - GET /api/morons/:platform/:slug - get list
  * - PUT /api/morons/:platform/:slug - update list
  * - DELETE /api/morons/:platform/:slug - delete list
- * - POST /api/morons/:platform/:slug/fork - fork list
+ * - POST /api/morons/:platform/:slug/actions/fork - fork list
  * - GET /api/morons/:platform - browse lists on platform
  * - GET /api/morons/:platform/search?q= - search lists
  * - GET /api/morons/:platform/popular - popular lists
@@ -278,8 +278,8 @@ export function createMoronRoutes(repos: Repositories): Router {
     }
   });
 
-  // POST /api/morons/:platform/:slug/fork - fork list
-  router.post("/:platform/:slug/fork", requireAuth, (req: Request, res: Response) => {
+  // POST /api/morons/:platform/:slug/actions/fork - fork list
+  router.post("/:platform/:slug/actions/fork", requireAuth, (req: Request, res: Response) => {
     try {
       const platform = param(req, "platform");
       const slug = param(req, "slug");

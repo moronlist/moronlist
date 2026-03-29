@@ -24,6 +24,8 @@ export type DatabaseSchema = {
     description: string | null;
     visibility: string; // public, private, unlisted
     version: number;
+    entry_count: number;
+    saint_count: number;
     forked_from_platform: string | null;
     forked_from_slug: string | null;
     created_at: string;
@@ -71,7 +73,17 @@ export type DatabaseSchema = {
     action: string; // ADD, REMOVE, ADD_SAINT, REMOVE_SAINT
     platform_user_id: string;
     user_id: string; // FK to user.id
+    reason: string | null;
+    flush_version: number | null;
     created_at: string;
+  };
+
+  // Flush state table - tracks flush progress per list
+  flush_state: {
+    list_platform: string;
+    list_slug: string;
+    last_flushed_version: number;
+    last_flushed_at: string | null;
   };
 
   // Subscription table - users subscribing to lists

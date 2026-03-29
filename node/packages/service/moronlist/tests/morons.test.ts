@@ -246,10 +246,10 @@ describe("Moron list routes", () => {
   });
 
   // =========================================
-  // POST /api/morons/:platform/:slug/fork — fork list
+  // POST /api/morons/:platform/:slug/actions/fork — fork list
   // =========================================
 
-  describe("POST /api/morons/:platform/:slug/fork", () => {
+  describe("POST /api/morons/:platform/:slug/actions/fork", () => {
     it("forks a list, copying entries, saints, and parents", async () => {
       const { token, userId } = createTestUser({ id: "forkowner" });
       const { token: forkerToken, userId: forkerId } = createTestUser({ id: "forker" });
@@ -277,7 +277,7 @@ describe("Moron list routes", () => {
 
       // Fork it
       const res = await request(getApp())
-        .post("/api/morons/x/source-list/fork")
+        .post("/api/morons/x/source-list/actions/fork")
         .set("Authorization", `Bearer ${forkerToken}`)
         .send({ slug: "forked-list", name: "My Fork" })
         .expect(201);
@@ -304,7 +304,7 @@ describe("Moron list routes", () => {
       const { token } = createTestUser();
 
       await request(getApp())
-        .post("/api/morons/x/nonexistent/fork")
+        .post("/api/morons/x/nonexistent/actions/fork")
         .set("Authorization", `Bearer ${token}`)
         .send({ slug: "fork-nope" })
         .expect(404);
@@ -326,7 +326,7 @@ describe("Moron list routes", () => {
         .expect(201);
 
       await request(getApp())
-        .post("/api/morons/x/orig/fork")
+        .post("/api/morons/x/orig/actions/fork")
         .set("Authorization", `Bearer ${token}`)
         .send({ slug: "taken-slug" })
         .expect(409);
