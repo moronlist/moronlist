@@ -18,7 +18,16 @@ import {
   getBlockedCount,
   getSaintedCount,
 } from "../lib/blocked-db.js";
-import { addEntries, addSaints, removeEntries, removeSaints, fetchMe } from "../lib/api-client.js";
+import {
+  addEntries,
+  addSaints,
+  removeEntries,
+  removeSaints,
+  fetchMe,
+  fetchMyLists,
+  fetchMySubscriptions,
+  createList,
+} from "../lib/api-client.js";
 
 export type MessageType =
   | { type: "LOGIN" }
@@ -31,6 +40,10 @@ export type MessageType =
   | { type: "CHECK_USER"; platformUserId: string }
   | { type: "GET_STATUS" }
   | { type: "GET_BLOCKED_SET" }
+  | { type: "GET_MY_LISTS" }
+  | { type: "GET_MY_SUBSCRIPTIONS" }
+  | { type: "CREATE_LIST"; platform: string; slug: string; name: string; description?: string }
+  | { type: "GET_LIST_ENTRIES"; platform: string; slug: string }
   | { type: "OPEN_QUICK_ADD"; platformUserId: string }
   | { type: "BLOCK_LIST_UPDATED" };
 
@@ -153,17 +166,20 @@ async function handleLogin(): Promise<{ success: boolean; error?: string }> {
       setAuthToken(token)
         .then(() => fetchMe())
         .then(async (meResult) => {
-          if (meResult.success) {
+          if (meResult.success && meResult.data.user !== null) {
             await setUser({
-              id: meResult.data.id,
-              name: meResult.data.name,
-              email: meResult.data.email,
+              id: meResult.data.user.id,
+              name: meResult.data.user.name,
+              email: meResult.data.user.email,
             });
             await performFullSync();
             notifyContentScriptsOfUpdate();
+            notifyContentScripts("AUTH_CHANGED");
             resolve({ success: true });
           } else {
-            resolve({ success: false, error: meResult.error });
+            // User exists but needs onboarding, or auth failed
+            notifyContentScripts("AUTH_CHANGED");
+            resolve({ success: true });
           }
         })
         .catch((err) => {
@@ -197,6 +213,7 @@ async function handleMessage(message: MessageType): Promise<unknown> {
     case "LOGOUT": {
       await setAuthToken(null);
       await setUser(null);
+      notifyContentScripts("AUTH_CHANGED");
       return { success: true };
     }
 
@@ -270,6 +287,32 @@ async function handleMessage(message: MessageType): Promise<unknown> {
       return { blockedCount: blockedN, saintedCount: saintedN };
     }
 
+    case "GET_MY_LISTS": {
+      const listsResult = await fetchMyLists();
+      return listsResult;
+    }
+
+    case "GET_MY_SUBSCRIPTIONS": {
+      const subsResult = await fetchMySubscriptions();
+      return subsResult;
+    }
+
+    case "CREATE_LIST": {
+      const createResult = await createList({
+        platform: message.platform,
+        slug: message.slug,
+        name: message.name,
+        description: message.description,
+      });
+      return createResult;
+    }
+
+    case "GET_LIST_ENTRIES": {
+      // List entries are in static txt files on the CDN
+      // For now, return empty — entries will be available after first data sync
+      return { success: true, data: [] };
+    }
+
     case "OPEN_QUICK_ADD": {
       await setPendingUsername(message.platformUserId);
       await chrome.action.openPopup();
@@ -324,14 +367,18 @@ function extractUsernameFromUrl(url: string): string | null {
   }
 }
 
-function notifyContentScriptsOfUpdate(): void {
+function notifyContentScripts(messageType: string): void {
   chrome.tabs.query({ url: ["https://x.com/*", "https://twitter.com/*"] }, (tabs) => {
     for (const tab of tabs) {
       if (tab.id !== undefined) {
-        chrome.tabs.sendMessage(tab.id, { type: "BLOCK_LIST_UPDATED" }).catch(() => {
+        chrome.tabs.sendMessage(tab.id, { type: messageType }).catch(() => {
           // Tab may not have content script loaded yet
         });
       }
     }
   });
+}
+
+function notifyContentScriptsOfUpdate(): void {
+  notifyContentScripts("BLOCK_LIST_UPDATED");
 }
