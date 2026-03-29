@@ -4,12 +4,11 @@
 
 import { expect } from "chai";
 import request from "supertest";
-import { getApp, getRepos, resetDatabase, createTestUser } from "./setup.js";
+import { getApp, resetDatabase, createTestUser } from "./setup.js";
 
 describe("Subscription routes", () => {
   let ownerToken: string;
   let subscriberToken: string;
-  let subscriberId: string;
 
   beforeEach(async () => {
     resetDatabase();
@@ -18,7 +17,6 @@ describe("Subscription routes", () => {
 
     const subscriber = createTestUser({ id: "subscriber" });
     subscriberToken = subscriber.token;
-    subscriberId = subscriber.userId;
 
     // Create a list
     await request(getApp())
@@ -151,37 +149,6 @@ describe("Subscription routes", () => {
         .expect(200);
 
       expect(res.body.subscriptions).to.have.lengthOf(0);
-    });
-  });
-
-  // =========================================
-  // Subscriber count
-  // =========================================
-
-  describe("subscriber count", () => {
-    it("updates on subscribe and unsubscribe", async () => {
-      // Initially 0
-      let listRes = await request(getApp()).get("/api/morons/x/test-list").expect(200);
-      expect(listRes.body.list.subscriberCount).to.equal(0);
-
-      // Subscribe
-      await request(getApp())
-        .post("/api/subscriptions")
-        .set("Authorization", `Bearer ${subscriberToken}`)
-        .send({ moronListId: "x/test-list" })
-        .expect(201);
-
-      listRes = await request(getApp()).get("/api/morons/x/test-list").expect(200);
-      expect(listRes.body.list.subscriberCount).to.equal(1);
-
-      // Unsubscribe
-      await request(getApp())
-        .delete("/api/subscriptions/x/test-list")
-        .set("Authorization", `Bearer ${subscriberToken}`)
-        .expect(200);
-
-      listRes = await request(getApp()).get("/api/morons/x/test-list").expect(200);
-      expect(listRes.body.list.subscriberCount).to.equal(0);
     });
   });
 });

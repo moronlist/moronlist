@@ -83,71 +83,6 @@ describe("Moron list routes", () => {
   });
 
   // =========================================
-  // GET /api/morons/:platform/:slug — get list
-  // =========================================
-
-  describe("GET /api/morons/:platform/:slug", () => {
-    it("returns list details with counts", async () => {
-      const { token, userId } = createTestUser();
-
-      await request(getApp())
-        .post("/api/morons")
-        .set("Authorization", `Bearer ${token}`)
-        .send({ platform: "x", slug: "my-list", name: "My List" })
-        .expect(201);
-
-      const res = await request(getApp())
-        .get("/api/morons/x/my-list")
-        .set("Authorization", `Bearer ${token}`)
-        .expect(200);
-
-      expect(res.body.list.platform).to.equal("x");
-      expect(res.body.list.slug).to.equal("my-list");
-      expect(res.body.list.name).to.equal("My List");
-      expect(res.body.list.entryCount).to.equal(0);
-      expect(res.body.list.saintCount).to.equal(0);
-      expect(res.body.list.subscriberCount).to.equal(0);
-      expect(res.body.list.isOwner).to.be.true;
-    });
-
-    it("returns 404 for nonexistent list", async () => {
-      await request(getApp()).get("/api/morons/x/nonexistent").expect(404);
-    });
-
-    it("allows unauthenticated access to public lists", async () => {
-      const { token } = createTestUser();
-
-      await request(getApp())
-        .post("/api/morons")
-        .set("Authorization", `Bearer ${token}`)
-        .send({ platform: "x", slug: "public-list", name: "Public" })
-        .expect(201);
-
-      const res = await request(getApp()).get("/api/morons/x/public-list").expect(200);
-
-      expect(res.body.list.name).to.equal("Public");
-      expect(res.body.list.isOwner).to.be.false;
-      expect(res.body.list.isSubscribed).to.be.false;
-    });
-
-    it("hides private lists from non-owners", async () => {
-      const { token } = createTestUser();
-      const { token: otherToken } = createTestUser({ id: "otheruser" });
-
-      await request(getApp())
-        .post("/api/morons")
-        .set("Authorization", `Bearer ${token}`)
-        .send({ platform: "x", slug: "private-list", name: "Secret", visibility: "private" })
-        .expect(201);
-
-      await request(getApp())
-        .get("/api/morons/x/private-list")
-        .set("Authorization", `Bearer ${otherToken}`)
-        .expect(404);
-    });
-  });
-
-  // =========================================
   // PUT /api/morons/:platform/:slug — update list
   // =========================================
 
@@ -222,8 +157,14 @@ describe("Moron list routes", () => {
 
       expect(res.body.deleted).to.be.true;
 
-      // Verify it's gone
-      await request(getApp()).get("/api/morons/x/del-list").expect(404);
+      // Verify it's gone via /api/me/morons
+      const meRes = await request(getApp())
+        .get("/api/me/morons")
+        .set("Authorization", `Bearer ${token}`)
+        .expect(200);
+
+      const slugs = meRes.body.lists.map((l: { slug: string }) => l.slug) as string[];
+      expect(slugs).to.not.include("del-list");
     });
 
     it("rejects non-owner delete", async () => {
@@ -251,7 +192,7 @@ describe("Moron list routes", () => {
 
   describe("POST /api/morons/:platform/:slug/actions/fork", () => {
     it("forks a list, copying entries and saints via changelog", async () => {
-      const { token, userId } = createTestUser({ id: "forkowner" });
+      const { token } = createTestUser({ id: "forkowner" });
       const { token: forkerToken, userId: forkerId } = createTestUser({ id: "forker" });
 
       // Create source list
@@ -287,27 +228,14 @@ describe("Moron list routes", () => {
       expect(res.body.list.ownerId).to.equal(forkerId);
       expect(res.body.list.forkedFrom).to.equal("x/source-list");
 
-      // Verify entries were copied via changelog by checking the forked list detail
-      const forkedListRes = await request(getApp()).get("/api/morons/x/forked-list").expect(200);
-      expect(forkedListRes.body.list.entryCount).to.equal(1);
-      expect(forkedListRes.body.list.saintCount).to.equal(1);
-
-      // Verify changelog of forked list contains ADD and ADD_SAINT entries
-      const changelogRes = await request(getApp())
-        .get("/api/morons/x/forked-list/changelog")
+      // Verify the forked list appears in the forker's owned lists
+      const meRes = await request(getApp())
+        .get("/api/me/morons")
+        .set("Authorization", `Bearer ${forkerToken}`)
         .expect(200);
 
-      const actions = changelogRes.body.changelog.map(
-        (c: { action: string }) => c.action
-      ) as string[];
-      expect(actions).to.include("ADD");
-      expect(actions).to.include("ADD_SAINT");
-
-      const platformUserIds = changelogRes.body.changelog.map(
-        (c: { platformUserId: string }) => c.platformUserId
-      ) as string[];
-      expect(platformUserIds).to.include("moron1");
-      expect(platformUserIds).to.include("saint1");
+      const forkedInList = meRes.body.lists.find((l: { slug: string }) => l.slug === "forked-list");
+      expect(forkedInList).to.not.be.undefined;
     });
 
     it("returns 404 when source does not exist", async () => {
@@ -340,105 +268,6 @@ describe("Moron list routes", () => {
         .set("Authorization", `Bearer ${token}`)
         .send({ slug: "taken-slug" })
         .expect(409);
-    });
-  });
-
-  // =========================================
-  // GET /api/morons/:platform — browse
-  // =========================================
-
-  describe("GET /api/morons/:platform", () => {
-    it("lists public lists on a platform", async () => {
-      const { token } = createTestUser();
-
-      await request(getApp())
-        .post("/api/morons")
-        .set("Authorization", `Bearer ${token}`)
-        .send({ platform: "x", slug: "list-a", name: "A" })
-        .expect(201);
-
-      await request(getApp())
-        .post("/api/morons")
-        .set("Authorization", `Bearer ${token}`)
-        .send({ platform: "x", slug: "list-b", name: "B" })
-        .expect(201);
-
-      const res = await request(getApp()).get("/api/morons/x").expect(200);
-
-      expect(res.body.lists).to.have.lengthOf(2);
-      expect(res.body.total).to.equal(2);
-      expect(res.body.offset).to.equal(0);
-    });
-
-    it("supports pagination", async () => {
-      const { token } = createTestUser();
-
-      for (let i = 0; i < 5; i++) {
-        await request(getApp())
-          .post("/api/morons")
-          .set("Authorization", `Bearer ${token}`)
-          .send({ platform: "x", slug: `page-list-${String(i)}`, name: `List ${String(i)}` })
-          .expect(201);
-      }
-
-      const res = await request(getApp()).get("/api/morons/x?offset=2&limit=2").expect(200);
-
-      expect(res.body.lists).to.have.lengthOf(2);
-      expect(res.body.total).to.equal(5);
-      expect(res.body.offset).to.equal(2);
-      expect(res.body.limit).to.equal(2);
-    });
-  });
-
-  // =========================================
-  // GET /api/morons/:platform/search — search
-  // =========================================
-
-  describe("GET /api/morons/:platform/search", () => {
-    it("searches lists by query", async () => {
-      const { token } = createTestUser();
-
-      await request(getApp())
-        .post("/api/morons")
-        .set("Authorization", `Bearer ${token}`)
-        .send({ platform: "x", slug: "crypto-scammers", name: "Crypto Scammers" })
-        .expect(201);
-
-      await request(getApp())
-        .post("/api/morons")
-        .set("Authorization", `Bearer ${token}`)
-        .send({ platform: "x", slug: "spam-bots", name: "Spam Bots" })
-        .expect(201);
-
-      const res = await request(getApp()).get("/api/morons/x/search?q=crypto").expect(200);
-
-      expect(res.body.lists).to.be.an("array");
-      // The search may or may not find results depending on the search implementation;
-      // at minimum it should return a valid response shape.
-      expect(res.body).to.have.property("offset");
-      expect(res.body).to.have.property("limit");
-    });
-  });
-
-  // =========================================
-  // GET /api/morons/:platform/popular — popular
-  // =========================================
-
-  describe("GET /api/morons/:platform/popular", () => {
-    it("returns popular lists", async () => {
-      const { token } = createTestUser();
-
-      await request(getApp())
-        .post("/api/morons")
-        .set("Authorization", `Bearer ${token}`)
-        .send({ platform: "x", slug: "pop-list", name: "Popular" })
-        .expect(201);
-
-      const res = await request(getApp()).get("/api/morons/x/popular").expect(200);
-
-      expect(res.body.lists).to.be.an("array");
-      expect(res.body).to.have.property("offset");
-      expect(res.body).to.have.property("limit");
     });
   });
 
@@ -496,66 +325,6 @@ describe("Moron list routes", () => {
   // =========================================
 
   describe("unlisted visibility", () => {
-    it("unlisted list is accessible by direct URL", async () => {
-      const { token } = createTestUser();
-
-      await request(getApp())
-        .post("/api/morons")
-        .set("Authorization", `Bearer ${token}`)
-        .send({
-          platform: "x",
-          slug: "unlisted-direct",
-          name: "Unlisted Direct",
-          visibility: "unlisted",
-        })
-        .expect(201);
-
-      const res = await request(getApp()).get("/api/morons/x/unlisted-direct").expect(200);
-
-      expect(res.body.list.name).to.equal("Unlisted Direct");
-      expect(res.body.list.visibility).to.equal("unlisted");
-    });
-
-    it("unlisted list does NOT appear in browse", async () => {
-      const { token } = createTestUser();
-
-      await request(getApp())
-        .post("/api/morons")
-        .set("Authorization", `Bearer ${token}`)
-        .send({
-          platform: "x",
-          slug: "unlisted-browse",
-          name: "Unlisted Browse",
-          visibility: "unlisted",
-        })
-        .expect(201);
-
-      const res = await request(getApp()).get("/api/morons/x").expect(200);
-
-      const slugs = res.body.lists.map((l: { slug: string }) => l.slug) as string[];
-      expect(slugs).to.not.include("unlisted-browse");
-    });
-
-    it("unlisted list does NOT appear in search", async () => {
-      const { token } = createTestUser();
-
-      await request(getApp())
-        .post("/api/morons")
-        .set("Authorization", `Bearer ${token}`)
-        .send({
-          platform: "x",
-          slug: "unlisted-search",
-          name: "Unlisted Search",
-          visibility: "unlisted",
-        })
-        .expect(201);
-
-      const res = await request(getApp()).get("/api/morons/x/search?q=unlisted").expect(200);
-
-      const slugs = res.body.lists.map((l: { slug: string }) => l.slug) as string[];
-      expect(slugs).to.not.include("unlisted-search");
-    });
-
     it("unlisted list DOES appear in GET /api/me/morons for the owner", async () => {
       const { token } = createTestUser();
 
@@ -603,8 +372,14 @@ describe("Moron list routes", () => {
 
       expect(res.body.deleted).to.be.true;
 
-      // Verify it's gone
-      await request(getApp()).get("/api/morons/x/root-del").expect(404);
+      // Verify it's gone via the owner's list
+      const meRes = await request(getApp())
+        .get("/api/me/morons")
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .expect(200);
+
+      const slugs = meRes.body.lists.map((l: { slug: string }) => l.slug) as string[];
+      expect(slugs).to.not.include("root-del");
     });
 
     it("ADMIN user can delete another user's list", async () => {

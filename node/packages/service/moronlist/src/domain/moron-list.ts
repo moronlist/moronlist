@@ -106,8 +106,6 @@ export function deleteList(
   }
 
   // Clean up all related data
-  repos.moronEntry.deleteAllByList(platform, slug);
-  repos.saintEntry.deleteAllByList(platform, slug);
   repos.changelog.deleteAllByList(platform, slug);
   repos.subscription.deleteAllByList(platform, slug);
   repos.inheritance.deleteAllForList(platform, slug);

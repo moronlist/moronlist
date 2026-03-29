@@ -5,8 +5,6 @@
 import type {
   UserDbRow,
   MoronListDbRow,
-  MoronEntryDbRow,
-  SaintEntryDbRow,
   ChangelogDbRow,
   FlushStateDbRow,
   SubscriptionDbRow,
@@ -91,27 +89,6 @@ export type MoronList = {
   updatedAt: Date;
 };
 
-export type MoronEntry = {
-  id: string;
-  listPlatform: string;
-  listSlug: string;
-  platformUserId: string;
-  displayName: string | null;
-  reason: string | null;
-  addedById: string;
-  createdAt: Date;
-};
-
-export type SaintEntry = {
-  id: string;
-  listPlatform: string;
-  listSlug: string;
-  platformUserId: string;
-  reason: string | null;
-  addedById: string;
-  createdAt: Date;
-};
-
 export type ChangelogAction = "ADD" | "REMOVE" | "ADD_SAINT" | "REMOVE_SAINT";
 
 export type ChangelogEntry = {
@@ -179,31 +156,6 @@ export function mapMoronListFromDb(row: MoronListDbRow): MoronList {
     forkedFromSlug: row.forked_from_slug,
     createdAt: new Date(row.created_at),
     updatedAt: new Date(row.updated_at),
-  };
-}
-
-export function mapMoronEntryFromDb(row: MoronEntryDbRow): MoronEntry {
-  return {
-    id: row.id,
-    listPlatform: row.list_platform,
-    listSlug: row.list_slug,
-    platformUserId: row.platform_user_id,
-    displayName: row.display_name,
-    reason: row.reason,
-    addedById: row.added_by_id,
-    createdAt: new Date(row.created_at),
-  };
-}
-
-export function mapSaintEntryFromDb(row: SaintEntryDbRow): SaintEntry {
-  return {
-    id: row.id,
-    listPlatform: row.list_platform,
-    listSlug: row.list_slug,
-    platformUserId: row.platform_user_id,
-    reason: row.reason,
-    addedById: row.added_by_id,
-    createdAt: new Date(row.created_at),
   };
 }
 

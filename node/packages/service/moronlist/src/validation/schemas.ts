@@ -14,12 +14,6 @@ export const platformParam = z.string().regex(PLATFORM_REGEX, "Invalid platform 
 export const slugParam = z.string().regex(SLUG_REGEX, "Invalid slug");
 export const userIdParam = z.string().regex(USER_ID_REGEX, "Invalid user ID format");
 
-// Pagination
-export const paginationQuery = z.object({
-  offset: z.coerce.number().int().min(0).default(0),
-  limit: z.coerce.number().int().min(1).max(500).default(50),
-});
-
 // Auth
 export const completeOnboardingBody = z.object({
   id: z
@@ -57,23 +51,6 @@ export const forkMoronListBody = z.object({
     .string()
     .regex(SLUG_REGEX, "Slug must be lowercase alphanumeric, hyphens, or underscores"),
   name: z.string().min(1).max(200).trim().optional(),
-});
-
-// Browse / Search
-export const searchQuery = z.object({
-  q: z.string().min(1).max(200).trim(),
-  offset: z.coerce.number().int().min(0).default(0),
-  limit: z.coerce.number().int().min(1).max(100).default(20),
-});
-
-export const browseQuery = z.object({
-  offset: z.coerce.number().int().min(0).default(0),
-  limit: z.coerce.number().int().min(1).max(100).default(20),
-});
-
-export const popularQuery = z.object({
-  offset: z.coerce.number().int().min(0).default(0),
-  limit: z.coerce.number().int().min(1).max(100).default(20),
 });
 
 // Reusable field for platform user IDs in entry/saint payloads
@@ -144,12 +121,4 @@ export const createSubscriptionBody = z.object({
   moronListId: z
     .string()
     .regex(/^[a-z][a-z0-9_-]{0,29}\/[a-z][a-z0-9_-]{0,59}$/, "Must be in platform/slug format"),
-});
-
-// Sync (plugin)
-export const syncBody = z.object({
-  lists: z.record(
-    z.string().regex(/^[a-z][a-z0-9_-]{0,29}\/[a-z][a-z0-9_-]{0,59}$/),
-    z.number().int().min(0)
-  ),
 });

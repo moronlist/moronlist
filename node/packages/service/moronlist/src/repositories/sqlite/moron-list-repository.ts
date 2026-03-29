@@ -8,7 +8,7 @@ import {
   executeUpdate,
   executeDelete,
 } from "@tinqerjs/better-sqlite3-adapter";
-import { schema, type SQLiteDatabase, type MoronListDbRow } from "moronlist-db";
+import { schema, type SQLiteDatabase } from "moronlist-db";
 import type {
   IMoronListRepository,
   CreateMoronListData,
@@ -80,124 +80,6 @@ function findByOwnerId(db: SQLiteDatabase, ownerId: string): MoronList[] {
           updated_at: l.updated_at,
         })),
     { ownerId }
-  );
-
-  return rows.map(mapMoronListFromDb);
-}
-
-function findByPlatform(
-  db: SQLiteDatabase,
-  platform: string,
-  offset: number,
-  limit: number
-): MoronList[] {
-  const rows = executeSelect(
-    db,
-    schema,
-    (q, p) =>
-      q
-        .from("moron_list")
-        .where((l) => l.platform === p.platform && l.visibility === p.visibility)
-        .select((l) => ({
-          platform: l.platform,
-          slug: l.slug,
-          owner_id: l.owner_id,
-          name: l.name,
-          description: l.description,
-          visibility: l.visibility,
-          version: l.version,
-          entry_count: l.entry_count,
-          saint_count: l.saint_count,
-          forked_from_platform: l.forked_from_platform,
-          forked_from_slug: l.forked_from_slug,
-          created_at: l.created_at,
-          updated_at: l.updated_at,
-        }))
-        .skip(p.offset)
-        .take(p.limit),
-    { platform, visibility: "public", offset, limit }
-  );
-
-  return rows.map(mapMoronListFromDb);
-}
-
-function countByPlatform(db: SQLiteDatabase, platform: string): number {
-  const rows = executeSelect(
-    db,
-    schema,
-    (q, p) =>
-      q
-        .from("moron_list")
-        .where((l) => l.platform === p.platform && l.visibility === p.visibility)
-        .groupBy(() => true)
-        .select((g) => ({
-          count: g.count(),
-        })),
-    { platform, visibility: "public" }
-  );
-
-  return rows[0]?.count ?? 0;
-}
-
-function searchByPlatform(
-  db: SQLiteDatabase,
-  platform: string,
-  query: string,
-  offset: number,
-  limit: number
-): MoronList[] {
-  // Raw SQL exception: Tinqer does not support LIKE operator
-  const pattern = `%${query}%`;
-  const rows = db
-    .prepare(
-      `SELECT platform, slug, owner_id, name, description, visibility, version,
-              entry_count, saint_count,
-              forked_from_platform, forked_from_slug, created_at, updated_at
-       FROM moron_list
-       WHERE platform = :platform
-         AND visibility = :visibility
-         AND (name LIKE :pattern OR slug LIKE :pattern)
-       ORDER BY created_at DESC
-       LIMIT :limit OFFSET :offset`
-    )
-    .all({ platform, visibility: "public", pattern, offset, limit }) as MoronListDbRow[];
-
-  return rows.map(mapMoronListFromDb);
-}
-
-function findPopularByPlatform(
-  db: SQLiteDatabase,
-  platform: string,
-  offset: number,
-  limit: number
-): MoronList[] {
-  // Popular = public lists sorted by version (higher version = more activity)
-  const rows = executeSelect(
-    db,
-    schema,
-    (q, p) =>
-      q
-        .from("moron_list")
-        .where((l) => l.platform === p.platform && l.visibility === p.visibility)
-        .select((l) => ({
-          platform: l.platform,
-          slug: l.slug,
-          owner_id: l.owner_id,
-          name: l.name,
-          description: l.description,
-          visibility: l.visibility,
-          version: l.version,
-          entry_count: l.entry_count,
-          saint_count: l.saint_count,
-          forked_from_platform: l.forked_from_platform,
-          forked_from_slug: l.forked_from_slug,
-          created_at: l.created_at,
-          updated_at: l.updated_at,
-        }))
-        .orderByDescending((l) => l.version)
-        .skip(p.offset)
-        .take(p.limit),
-    { platform, visibility: "public", offset, limit }
   );
 
   return rows.map(mapMoronListFromDb);
@@ -347,12 +229,6 @@ export function createMoronListRepository(db: SQLiteDatabase): IMoronListReposit
   return {
     findByPlatformAndSlug: (platform, slug) => findByPlatformAndSlug(db, platform, slug),
     findByOwnerId: (ownerId) => findByOwnerId(db, ownerId),
-    findByPlatform: (platform, offset, limit) => findByPlatform(db, platform, offset, limit),
-    countByPlatform: (platform) => countByPlatform(db, platform),
-    searchByPlatform: (platform, query, offset, limit) =>
-      searchByPlatform(db, platform, query, offset, limit),
-    findPopularByPlatform: (platform, offset, limit) =>
-      findPopularByPlatform(db, platform, offset, limit),
     create: (data) => create(db, data),
     update: (platform, slug, data) => update(db, platform, slug, data),
     incrementVersion: (platform, slug) => incrementVersion(db, platform, slug),

@@ -1,5 +1,5 @@
 /**
- * Saint entry endpoint integration tests (changelog-only)
+ * Saint entry endpoint integration tests
  */
 
 import { expect } from "chai";
@@ -86,28 +86,6 @@ describe("Saint routes", () => {
       expect(res.body.skipped).to.equal(1);
     });
 
-    it("increments version once per batch, not per item", async () => {
-      await request(getApp())
-        .post("/api/morons/x/test-list/saints")
-        .set("Authorization", `Bearer ${ownerToken}`)
-        .send([{ platformUserId: "v1" }, { platformUserId: "v2" }, { platformUserId: "v3" }])
-        .expect(201);
-
-      const listRes = await request(getApp()).get("/api/morons/x/test-list").expect(200);
-      expect(listRes.body.list.version).to.equal(1);
-    });
-
-    it("updates saint_count on the list", async () => {
-      await request(getApp())
-        .post("/api/morons/x/test-list/saints")
-        .set("Authorization", `Bearer ${ownerToken}`)
-        .send([{ platformUserId: "c1" }, { platformUserId: "c2" }])
-        .expect(201);
-
-      const listRes = await request(getApp()).get("/api/morons/x/test-list").expect(200);
-      expect(listRes.body.list.saintCount).to.equal(2);
-    });
-
     it("rejects non-owner with 403", async () => {
       const { token: otherToken } = createTestUser({ id: "saintintruder" });
 
@@ -167,43 +145,6 @@ describe("Saint routes", () => {
       expect(res.body.skipped).to.equal(1);
     });
 
-    it("increments version once per batch removal", async () => {
-      await request(getApp())
-        .post("/api/morons/x/test-list/saints")
-        .set("Authorization", `Bearer ${ownerToken}`)
-        .send([{ platformUserId: "rm1" }, { platformUserId: "rm2" }])
-        .expect(201);
-
-      await request(getApp())
-        .delete("/api/morons/x/test-list/saints")
-        .set("Authorization", `Bearer ${ownerToken}`)
-        .send([{ platformUserId: "rm1" }, { platformUserId: "rm2" }])
-        .expect(200);
-
-      // Version should be 2 (one for add, one for remove)
-      const listRes = await request(getApp()).get("/api/morons/x/test-list").expect(200);
-      expect(listRes.body.list.version).to.equal(2);
-    });
-
-    it("decrements saint_count on the list", async () => {
-      // Add 3
-      await request(getApp())
-        .post("/api/morons/x/test-list/saints")
-        .set("Authorization", `Bearer ${ownerToken}`)
-        .send([{ platformUserId: "d1" }, { platformUserId: "d2" }, { platformUserId: "d3" }])
-        .expect(201);
-
-      // Remove 1
-      await request(getApp())
-        .delete("/api/morons/x/test-list/saints")
-        .set("Authorization", `Bearer ${ownerToken}`)
-        .send([{ platformUserId: "d2" }])
-        .expect(200);
-
-      const listRes = await request(getApp()).get("/api/morons/x/test-list").expect(200);
-      expect(listRes.body.list.saintCount).to.equal(2);
-    });
-
     it("rejects non-owner with 403", async () => {
       const { token: otherToken } = createTestUser({ id: "delnotowner" });
 
@@ -227,52 +168,6 @@ describe("Saint routes", () => {
         .set("Authorization", `Bearer ${ownerToken}`)
         .send([{ platformUserId: "saint4" }])
         .expect(404);
-    });
-  });
-
-  // =========================================
-  // Changelog verification
-  // =========================================
-
-  describe("changelog entries for saints", () => {
-    it("creates ADD_SAINT changelog when adding", async () => {
-      await request(getApp())
-        .post("/api/morons/x/test-list/saints")
-        .set("Authorization", `Bearer ${ownerToken}`)
-        .send([{ platformUserId: "cl_saint" }])
-        .expect(201);
-
-      const changelogRes = await request(getApp())
-        .get("/api/morons/x/test-list/changelog")
-        .expect(200);
-
-      expect(changelogRes.body.changelog).to.have.lengthOf(1);
-      expect(changelogRes.body.changelog[0].action).to.equal("ADD_SAINT");
-      expect(changelogRes.body.changelog[0].platformUserId).to.equal("cl_saint");
-    });
-
-    it("creates REMOVE_SAINT changelog when removing", async () => {
-      await request(getApp())
-        .post("/api/morons/x/test-list/saints")
-        .set("Authorization", `Bearer ${ownerToken}`)
-        .send([{ platformUserId: "rm_saint" }])
-        .expect(201);
-
-      await request(getApp())
-        .delete("/api/morons/x/test-list/saints")
-        .set("Authorization", `Bearer ${ownerToken}`)
-        .send([{ platformUserId: "rm_saint" }])
-        .expect(200);
-
-      const changelogRes = await request(getApp())
-        .get("/api/morons/x/test-list/changelog")
-        .expect(200);
-
-      const actions = changelogRes.body.changelog.map(
-        (c: { action: string }) => c.action
-      ) as string[];
-      expect(actions).to.include("ADD_SAINT");
-      expect(actions).to.include("REMOVE_SAINT");
     });
   });
 });

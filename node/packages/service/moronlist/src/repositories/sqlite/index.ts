@@ -7,8 +7,6 @@ import { initTinqerDatabase, type SQLiteDatabase } from "moronlist-db";
 import type { Repositories } from "../interfaces/index.js";
 import { createUserRepository } from "./user-repository.js";
 import { createMoronListRepository } from "./moron-list-repository.js";
-import { createMoronEntryRepository } from "./moron-entry-repository.js";
-import { createSaintEntryRepository } from "./saint-entry-repository.js";
 import { createInheritanceRepository } from "./inheritance-repository.js";
 import { createChangelogRepository } from "./changelog-repository.js";
 import { createFlushStateRepository } from "./flush-state-repository.js";
@@ -23,8 +21,6 @@ export function createRepositories(dbPath: string): Repositories {
   return {
     user: createUserRepository(db),
     moronList: createMoronListRepository(db),
-    moronEntry: createMoronEntryRepository(db),
-    saintEntry: createSaintEntryRepository(db),
     inheritance: createInheritanceRepository(db),
     changelog: createChangelogRepository(db),
     flushState: createFlushStateRepository(db),

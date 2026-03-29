@@ -23,5 +23,3 @@ import "./entries.test.js";
 import "./saints.test.js";
 import "./inheritance.test.js";
 import "./subscriptions.test.js";
-import "./sync.test.js";
-import "./users.test.js";
