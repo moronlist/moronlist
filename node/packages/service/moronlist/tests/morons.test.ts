@@ -250,7 +250,7 @@ describe("Moron list routes", () => {
   // =========================================
 
   describe("POST /api/morons/:platform/:slug/actions/fork", () => {
-    it("forks a list, copying entries, saints, and parents", async () => {
+    it("forks a list, copying entries and saints via changelog", async () => {
       const { token, userId } = createTestUser({ id: "forkowner" });
       const { token: forkerToken, userId: forkerId } = createTestUser({ id: "forker" });
 
@@ -261,18 +261,18 @@ describe("Moron list routes", () => {
         .send({ platform: "x", slug: "source-list", name: "Source" })
         .expect(201);
 
-      // Add an entry to source
+      // Add entries to source via new array-body API
       await request(getApp())
         .post("/api/morons/x/source-list/entries")
         .set("Authorization", `Bearer ${token}`)
-        .send({ platformUserId: "moron1", reason: "Being bad" })
+        .send([{ platformUserId: "moron1", reason: "Being bad" }])
         .expect(201);
 
-      // Add a saint to source
+      // Add a saint to source via new array-body API
       await request(getApp())
         .post("/api/morons/x/source-list/saints")
         .set("Authorization", `Bearer ${token}`)
-        .send({ platformUserId: "saint1", reason: "Being good" })
+        .send([{ platformUserId: "saint1", reason: "Being good" }])
         .expect(201);
 
       // Fork it
@@ -287,17 +287,27 @@ describe("Moron list routes", () => {
       expect(res.body.list.ownerId).to.equal(forkerId);
       expect(res.body.list.forkedFrom).to.equal("x/source-list");
 
-      // Verify entries were copied
-      const entriesRes = await request(getApp())
-        .get("/api/morons/x/forked-list/entries")
-        .expect(200);
-      expect(entriesRes.body.entries).to.have.lengthOf(1);
-      expect(entriesRes.body.entries[0].platformUserId).to.equal("moron1");
+      // Verify entries were copied via changelog by checking the forked list detail
+      const forkedListRes = await request(getApp()).get("/api/morons/x/forked-list").expect(200);
+      expect(forkedListRes.body.list.entryCount).to.equal(1);
+      expect(forkedListRes.body.list.saintCount).to.equal(1);
 
-      // Verify saints were copied
-      const saintsRes = await request(getApp()).get("/api/morons/x/forked-list/saints").expect(200);
-      expect(saintsRes.body.saints).to.have.lengthOf(1);
-      expect(saintsRes.body.saints[0].platformUserId).to.equal("saint1");
+      // Verify changelog of forked list contains ADD and ADD_SAINT entries
+      const changelogRes = await request(getApp())
+        .get("/api/morons/x/forked-list/changelog")
+        .expect(200);
+
+      const actions = changelogRes.body.changelog.map(
+        (c: { action: string }) => c.action
+      ) as string[];
+      expect(actions).to.include("ADD");
+      expect(actions).to.include("ADD_SAINT");
+
+      const platformUserIds = changelogRes.body.changelog.map(
+        (c: { platformUserId: string }) => c.platformUserId
+      ) as string[];
+      expect(platformUserIds).to.include("moron1");
+      expect(platformUserIds).to.include("saint1");
     });
 
     it("returns 404 when source does not exist", async () => {

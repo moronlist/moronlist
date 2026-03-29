@@ -103,10 +103,7 @@ export function createAuthRoutes(repos: Repositories, personaClient: PersonaClie
   // the token in the URL fragment so the Chrome plugin can read it from
   // the tab URL. Otherwise, serve the static HTML page as-is.
   router.get("/callback", (req: Request, res: Response) => {
-    const cookies =
-      typeof req.cookies === "object"
-        ? (req.cookies as Record<string, string>)
-        : {};
+    const cookies = typeof req.cookies === "object" ? (req.cookies as Record<string, string>) : {};
     const accessToken = cookies.access_token;
 
     if (typeof accessToken === "string" && accessToken !== "") {

@@ -1,5 +1,5 @@
 /**
- * Moron entry endpoint integration tests
+ * Moron entry endpoint integration tests (changelog-only)
  */
 
 import { expect } from "chai";
@@ -29,102 +29,45 @@ describe("Entry routes", () => {
   // =========================================
 
   describe("POST /api/morons/x/test-list/entries", () => {
-    it("adds an entry and bumps list version", async () => {
+    it("adds a single entry via array body", async () => {
       const res = await request(getApp())
         .post("/api/morons/x/test-list/entries")
         .set("Authorization", `Bearer ${ownerToken}`)
-        .send({ platformUserId: "user1", displayName: "User One", reason: "Spamming" })
+        .send([{ platformUserId: "user1", reason: "Spamming" }])
         .expect(201);
 
-      expect(res.body.entry.platformUserId).to.equal("user1");
-      expect(res.body.entry.displayName).to.equal("User One");
-      expect(res.body.entry.reason).to.equal("Spamming");
-      expect(res.body.entry.id).to.be.a("string");
-
-      // Verify version bumped
-      const listRes = await request(getApp()).get("/api/morons/x/test-list").expect(200);
-      expect(listRes.body.list.version).to.equal(1);
+      expect(res.body.added).to.equal(1);
+      expect(res.body.skipped).to.equal(0);
     });
 
-    it("rejects duplicate platformUserId on the same list", async () => {
-      await request(getApp())
-        .post("/api/morons/x/test-list/entries")
-        .set("Authorization", `Bearer ${ownerToken}`)
-        .send({ platformUserId: "dupuser" })
-        .expect(201);
-
+    it("adds multiple entries in a single call", async () => {
       const res = await request(getApp())
         .post("/api/morons/x/test-list/entries")
         .set("Authorization", `Bearer ${ownerToken}`)
-        .send({ platformUserId: "dupuser" })
-        .expect(409);
-
-      expect(res.body.error).to.include("already on this list");
-    });
-
-    it("rejects non-owner", async () => {
-      const { token: otherToken } = createTestUser({ id: "notowner" });
-
-      await request(getApp())
-        .post("/api/morons/x/test-list/entries")
-        .set("Authorization", `Bearer ${otherToken}`)
-        .send({ platformUserId: "user2" })
-        .expect(403);
-    });
-
-    it("returns 401 without auth", async () => {
-      await request(getApp())
-        .post("/api/morons/x/test-list/entries")
-        .send({ platformUserId: "user3" })
-        .expect(401);
-    });
-
-    it("returns 404 for nonexistent list", async () => {
-      await request(getApp())
-        .post("/api/morons/x/no-such-list/entries")
-        .set("Authorization", `Bearer ${ownerToken}`)
-        .send({ platformUserId: "user4" })
-        .expect(404);
-    });
-  });
-
-  // =========================================
-  // POST /api/morons/:platform/:slug/entries/batch
-  // =========================================
-
-  describe("POST /api/morons/x/test-list/entries/batch", () => {
-    it("adds multiple entries in a batch", async () => {
-      const res = await request(getApp())
-        .post("/api/morons/x/test-list/entries/batch")
-        .set("Authorization", `Bearer ${ownerToken}`)
-        .send({
-          entries: [
-            { platformUserId: "batch1", reason: "Bad" },
-            { platformUserId: "batch2", reason: "Worse" },
-            { platformUserId: "batch3", reason: "Worst" },
-          ],
-        })
+        .send([
+          { platformUserId: "batch1", reason: "Bad" },
+          { platformUserId: "batch2", reason: "Worse" },
+          { platformUserId: "batch3", reason: "Worst" },
+        ])
         .expect(201);
 
-      expect(res.body.entries).to.have.lengthOf(3);
       expect(res.body.added).to.equal(3);
       expect(res.body.skipped).to.equal(0);
     });
 
-    it("skips already existing entries", async () => {
-      // Add one first
+    it("skips duplicates (already on the list)", async () => {
+      // Add first
       await request(getApp())
         .post("/api/morons/x/test-list/entries")
         .set("Authorization", `Bearer ${ownerToken}`)
-        .send({ platformUserId: "existing" })
+        .send([{ platformUserId: "existing" }])
         .expect(201);
 
+      // Try to add again along with a new one
       const res = await request(getApp())
-        .post("/api/morons/x/test-list/entries/batch")
+        .post("/api/morons/x/test-list/entries")
         .set("Authorization", `Bearer ${ownerToken}`)
-        .send({
-          entries: [{ platformUserId: "existing" }, { platformUserId: "newone" }],
-        })
+        .send([{ platformUserId: "existing" }, { platformUserId: "newone" }])
         .expect(201);
 
       expect(res.body.added).to.equal(1);
@@ -135,108 +78,162 @@ describe("Entry routes", () => {
       await request(getApp())
         .post("/api/morons/x/test-list/entries")
         .set("Authorization", `Bearer ${ownerToken}`)
-        .send({ platformUserId: "onlydup" })
+        .send([{ platformUserId: "onlydup" }])
         .expect(201);
 
       const res = await request(getApp())
-        .post("/api/morons/x/test-list/entries/batch")
+        .post("/api/morons/x/test-list/entries")
         .set("Authorization", `Bearer ${ownerToken}`)
-        .send({ entries: [{ platformUserId: "onlydup" }] })
+        .send([{ platformUserId: "onlydup" }])
         .expect(200);
 
       expect(res.body.added).to.equal(0);
       expect(res.body.skipped).to.equal(1);
     });
-  });
 
-  // =========================================
-  // GET /api/morons/:platform/:slug/entries
-  // =========================================
-
-  describe("GET /api/morons/x/test-list/entries", () => {
-    it("returns paginated entries", async () => {
-      // Add some entries
+    it("increments version once per batch, not per item", async () => {
       await request(getApp())
-        .post("/api/morons/x/test-list/entries/batch")
+        .post("/api/morons/x/test-list/entries")
         .set("Authorization", `Bearer ${ownerToken}`)
-        .send({
-          entries: [{ platformUserId: "p1" }, { platformUserId: "p2" }, { platformUserId: "p3" }],
-        })
+        .send([{ platformUserId: "v1" }, { platformUserId: "v2" }, { platformUserId: "v3" }])
         .expect(201);
 
-      const res = await request(getApp())
-        .get("/api/morons/x/test-list/entries?offset=0&limit=2")
-        .expect(200);
+      const listRes = await request(getApp()).get("/api/morons/x/test-list").expect(200);
+      expect(listRes.body.list.version).to.equal(1);
+    });
 
-      expect(res.body.entries).to.have.lengthOf(2);
-      expect(res.body.total).to.equal(3);
-      expect(res.body.offset).to.equal(0);
-      expect(res.body.limit).to.equal(2);
+    it("updates entry_count on the list", async () => {
+      await request(getApp())
+        .post("/api/morons/x/test-list/entries")
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .send([{ platformUserId: "c1" }, { platformUserId: "c2" }])
+        .expect(201);
+
+      const listRes = await request(getApp()).get("/api/morons/x/test-list").expect(200);
+      expect(listRes.body.list.entryCount).to.equal(2);
+    });
+
+    it("rejects non-owner with 403", async () => {
+      const { token: otherToken } = createTestUser({ id: "notowner" });
+
+      await request(getApp())
+        .post("/api/morons/x/test-list/entries")
+        .set("Authorization", `Bearer ${otherToken}`)
+        .send([{ platformUserId: "user2" }])
+        .expect(403);
+    });
+
+    it("returns 401 without auth", async () => {
+      await request(getApp())
+        .post("/api/morons/x/test-list/entries")
+        .send([{ platformUserId: "user3" }])
+        .expect(401);
     });
 
     it("returns 404 for nonexistent list", async () => {
-      await request(getApp()).get("/api/morons/x/nope/entries").expect(404);
-    });
-  });
-
-  // =========================================
-  // DELETE /api/morons/:platform/:slug/entries/:id
-  // =========================================
-
-  describe("DELETE /api/morons/x/test-list/entries/:id", () => {
-    it("removes an entry by id", async () => {
-      const createRes = await request(getApp())
-        .post("/api/morons/x/test-list/entries")
-        .set("Authorization", `Bearer ${ownerToken}`)
-        .send({ platformUserId: "removeme" })
-        .expect(201);
-
-      const entryId = createRes.body.entry.id as string;
-
-      const res = await request(getApp())
-        .delete(`/api/morons/x/test-list/entries/${entryId}`)
-        .set("Authorization", `Bearer ${ownerToken}`)
-        .expect(200);
-
-      expect(res.body.deleted).to.be.true;
-
-      // Verify it's gone
-      const listRes = await request(getApp()).get("/api/morons/x/test-list/entries").expect(200);
-      expect(listRes.body.entries).to.have.lengthOf(0);
-    });
-
-    it("returns 404 for nonexistent entry", async () => {
       await request(getApp())
-        .delete("/api/morons/x/test-list/entries/nonexistent-id")
+        .post("/api/morons/x/no-such-list/entries")
         .set("Authorization", `Bearer ${ownerToken}`)
+        .send([{ platformUserId: "user4" }])
         .expect(404);
     });
   });
 
   // =========================================
-  // DELETE /api/morons/:platform/:slug/entries?platformUserId=
+  // DELETE /api/morons/:platform/:slug/entries
   // =========================================
 
-  describe("DELETE /api/morons/x/test-list/entries?platformUserId=", () => {
-    it("removes entry by platform user id", async () => {
+  describe("DELETE /api/morons/x/test-list/entries", () => {
+    it("removes entries via array body", async () => {
+      // Add entries first
       await request(getApp())
         .post("/api/morons/x/test-list/entries")
         .set("Authorization", `Bearer ${ownerToken}`)
-        .send({ platformUserId: "byplatform" })
+        .send([{ platformUserId: "removeme" }])
         .expect(201);
 
       const res = await request(getApp())
-        .delete("/api/morons/x/test-list/entries?platformUserId=byplatform")
+        .delete("/api/morons/x/test-list/entries")
         .set("Authorization", `Bearer ${ownerToken}`)
+        .send([{ platformUserId: "removeme" }])
         .expect(200);
 
-      expect(res.body.deleted).to.be.true;
+      expect(res.body.removed).to.equal(1);
+      expect(res.body.skipped).to.equal(0);
     });
 
-    it("returns 404 when platform user not found", async () => {
-      await request(getApp())
-        .delete("/api/morons/x/test-list/entries?platformUserId=ghost")
+    it("skips entries not currently on the list", async () => {
+      const res = await request(getApp())
+        .delete("/api/morons/x/test-list/entries")
         .set("Authorization", `Bearer ${ownerToken}`)
+        .send([{ platformUserId: "ghost" }])
+        .expect(200);
+
+      expect(res.body.removed).to.equal(0);
+      expect(res.body.skipped).to.equal(1);
+    });
+
+    it("increments version once per batch removal", async () => {
+      // Add entries
+      await request(getApp())
+        .post("/api/morons/x/test-list/entries")
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .send([{ platformUserId: "rm1" }, { platformUserId: "rm2" }])
+        .expect(201);
+
+      // Remove them
+      await request(getApp())
+        .delete("/api/morons/x/test-list/entries")
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .send([{ platformUserId: "rm1" }, { platformUserId: "rm2" }])
+        .expect(200);
+
+      // Version should be 2 (one for add, one for remove)
+      const listRes = await request(getApp()).get("/api/morons/x/test-list").expect(200);
+      expect(listRes.body.list.version).to.equal(2);
+    });
+
+    it("decrements entry_count on the list", async () => {
+      // Add 3
+      await request(getApp())
+        .post("/api/morons/x/test-list/entries")
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .send([{ platformUserId: "d1" }, { platformUserId: "d2" }, { platformUserId: "d3" }])
+        .expect(201);
+
+      // Remove 1
+      await request(getApp())
+        .delete("/api/morons/x/test-list/entries")
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .send([{ platformUserId: "d2" }])
+        .expect(200);
+
+      const listRes = await request(getApp()).get("/api/morons/x/test-list").expect(200);
+      expect(listRes.body.list.entryCount).to.equal(2);
+    });
+
+    it("rejects non-owner with 403", async () => {
+      const { token: otherToken } = createTestUser({ id: "delnotowner" });
+
+      await request(getApp())
+        .delete("/api/morons/x/test-list/entries")
+        .set("Authorization", `Bearer ${otherToken}`)
+        .send([{ platformUserId: "user2" }])
+        .expect(403);
+    });
+
+    it("returns 401 without auth", async () => {
+      await request(getApp())
+        .delete("/api/morons/x/test-list/entries")
+        .send([{ platformUserId: "user3" }])
+        .expect(401);
+    });
+
+    it("returns 404 for nonexistent list", async () => {
+      await request(getApp())
+        .delete("/api/morons/x/no-such-list/entries")
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .send([{ platformUserId: "user4" }])
         .expect(404);
     });
   });
@@ -246,11 +243,11 @@ describe("Entry routes", () => {
   // =========================================
 
   describe("changelog entries", () => {
-    it("creates ADD changelog when adding an entry", async () => {
+    it("creates ADD changelog when adding entries", async () => {
       await request(getApp())
         .post("/api/morons/x/test-list/entries")
         .set("Authorization", `Bearer ${ownerToken}`)
-        .send({ platformUserId: "logged_user" })
+        .send([{ platformUserId: "logged_user" }])
         .expect(201);
 
       const changelogRes = await request(getApp())
@@ -262,18 +259,17 @@ describe("Entry routes", () => {
       expect(changelogRes.body.changelog[0].platformUserId).to.equal("logged_user");
     });
 
-    it("creates REMOVE changelog when removing an entry", async () => {
-      const createRes = await request(getApp())
+    it("creates REMOVE changelog when removing entries", async () => {
+      await request(getApp())
         .post("/api/morons/x/test-list/entries")
         .set("Authorization", `Bearer ${ownerToken}`)
-        .send({ platformUserId: "removed_user" })
+        .send([{ platformUserId: "removed_user" }])
         .expect(201);
 
-      const entryId = createRes.body.entry.id as string;
-
       await request(getApp())
-        .delete(`/api/morons/x/test-list/entries/${entryId}`)
+        .delete("/api/morons/x/test-list/entries")
         .set("Authorization", `Bearer ${ownerToken}`)
+        .send([{ platformUserId: "removed_user" }])
         .expect(200);
 
       const changelogRes = await request(getApp())
@@ -294,18 +290,15 @@ describe("Entry routes", () => {
   // =========================================
 
   describe("changelog query params", () => {
-    it("GET /api/morons/x/list/changelog returns all entries by default", async () => {
-      // Add multiple entries to generate changelog
+    it("GET changelog returns all entries by default", async () => {
       await request(getApp())
-        .post("/api/morons/x/test-list/entries/batch")
+        .post("/api/morons/x/test-list/entries")
         .set("Authorization", `Bearer ${ownerToken}`)
-        .send({
-          entries: [
-            { platformUserId: "cl_user1" },
-            { platformUserId: "cl_user2" },
-            { platformUserId: "cl_user3" },
-          ],
-        })
+        .send([
+          { platformUserId: "cl_user1" },
+          { platformUserId: "cl_user2" },
+          { platformUserId: "cl_user3" },
+        ])
         .expect(201);
 
       const res = await request(getApp()).get("/api/morons/x/test-list/changelog").expect(200);
@@ -315,57 +308,51 @@ describe("Entry routes", () => {
       expect(res.body.currentVersion).to.be.a("number");
     });
 
-    it("GET /api/morons/x/list/changelog?sinceVersion=N returns only entries after version N", async () => {
-      // Add first entry
+    it("GET changelog?sinceVersion=N returns only entries after version N", async () => {
+      // Add first entry (version 1)
       await request(getApp())
         .post("/api/morons/x/test-list/entries")
         .set("Authorization", `Bearer ${ownerToken}`)
-        .send({ platformUserId: "sv_user1" })
+        .send([{ platformUserId: "sv_user1" }])
         .expect(201);
 
-      // Get the version from changelog (first entry has version 1)
       const cl1 = await request(getApp()).get("/api/morons/x/test-list/changelog").expect(200);
       const versionAfterFirst = cl1.body.changelog[cl1.body.changelog.length - 1].version as number;
 
-      // Add more entries
+      // Add more entries (version 2, 3)
       await request(getApp())
         .post("/api/morons/x/test-list/entries")
         .set("Authorization", `Bearer ${ownerToken}`)
-        .send({ platformUserId: "sv_user2" })
+        .send([{ platformUserId: "sv_user2" }])
         .expect(201);
 
       await request(getApp())
         .post("/api/morons/x/test-list/entries")
         .set("Authorization", `Bearer ${ownerToken}`)
-        .send({ platformUserId: "sv_user3" })
+        .send([{ platformUserId: "sv_user3" }])
         .expect(201);
 
-      // Get changelog since the first version
       const res = await request(getApp())
         .get(`/api/morons/x/test-list/changelog?sinceVersion=${String(versionAfterFirst)}`)
         .expect(200);
 
       expect(res.body.changelog).to.be.an("array");
       expect(res.body.changelog).to.have.lengthOf(2);
-      // All entries should be after versionAfterFirst
       for (const entry of res.body.changelog as Array<{ version: number }>) {
         expect(entry.version).to.be.greaterThan(versionAfterFirst);
       }
     });
 
-    it("GET /api/morons/x/list/changelog?limit=2 returns limited entries", async () => {
-      // Add multiple entries
+    it("GET changelog?limit=2 returns limited entries", async () => {
       await request(getApp())
-        .post("/api/morons/x/test-list/entries/batch")
+        .post("/api/morons/x/test-list/entries")
         .set("Authorization", `Bearer ${ownerToken}`)
-        .send({
-          entries: [
-            { platformUserId: "lim_user1" },
-            { platformUserId: "lim_user2" },
-            { platformUserId: "lim_user3" },
-            { platformUserId: "lim_user4" },
-          ],
-        })
+        .send([
+          { platformUserId: "lim_user1" },
+          { platformUserId: "lim_user2" },
+          { platformUserId: "lim_user3" },
+          { platformUserId: "lim_user4" },
+        ])
         .expect(201);
 
       const res = await request(getApp())
@@ -381,19 +368,19 @@ describe("Entry routes", () => {
       await request(getApp())
         .post("/api/morons/x/test-list/entries")
         .set("Authorization", `Bearer ${ownerToken}`)
-        .send({ platformUserId: "ord_user1" })
+        .send([{ platformUserId: "ord_user1" }])
         .expect(201);
 
       await request(getApp())
         .post("/api/morons/x/test-list/entries")
         .set("Authorization", `Bearer ${ownerToken}`)
-        .send({ platformUserId: "ord_user2" })
+        .send([{ platformUserId: "ord_user2" }])
         .expect(201);
 
       await request(getApp())
         .post("/api/morons/x/test-list/entries")
         .set("Authorization", `Bearer ${ownerToken}`)
-        .send({ platformUserId: "ord_user3" })
+        .send([{ platformUserId: "ord_user3" }])
         .expect(201);
 
       const res = await request(getApp()).get("/api/morons/x/test-list/changelog").expect(200);

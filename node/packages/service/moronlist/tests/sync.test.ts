@@ -36,21 +36,17 @@ describe("Sync routes", () => {
 
     if (opts.entries !== undefined && opts.entries.length > 0) {
       await request(getApp())
-        .post(`/api/morons/x/${slug}/entries/batch`)
+        .post(`/api/morons/x/${slug}/entries`)
         .set("Authorization", `Bearer ${ownerToken}`)
-        .send({
-          entries: opts.entries.map((id) => ({ platformUserId: id })),
-        })
+        .send(opts.entries.map((id) => ({ platformUserId: id })))
         .expect(201);
     }
 
     if (opts.saints !== undefined && opts.saints.length > 0) {
       await request(getApp())
-        .post(`/api/morons/x/${slug}/saints/batch`)
+        .post(`/api/morons/x/${slug}/saints`)
         .set("Authorization", `Bearer ${ownerToken}`)
-        .send({
-          saints: opts.saints.map((id) => ({ platformUserId: id })),
-        })
+        .send(opts.saints.map((id) => ({ platformUserId: id })))
         .expect(201);
     }
 
@@ -120,7 +116,7 @@ describe("Sync routes", () => {
       await request(getApp())
         .post("/api/morons/x/deltaadd/entries")
         .set("Authorization", `Bearer ${ownerToken}`)
-        .send({ platformUserId: "newmoron" })
+        .send([{ platformUserId: "newmoron" }])
         .expect(201);
 
       const res = await request(getApp())
@@ -145,8 +141,9 @@ describe("Sync routes", () => {
 
       // Remove the entry
       await request(getApp())
-        .delete("/api/morons/x/deltarm/entries?platformUserId=victim")
+        .delete("/api/morons/x/deltarm/entries")
         .set("Authorization", `Bearer ${ownerToken}`)
+        .send([{ platformUserId: "victim" }])
         .expect(200);
 
       const res = await request(getApp())
@@ -175,7 +172,7 @@ describe("Sync routes", () => {
       await request(getApp())
         .post("/api/morons/x/deltasaint/saints")
         .set("Authorization", `Bearer ${ownerToken}`)
-        .send({ platformUserId: "goodperson" })
+        .send([{ platformUserId: "goodperson" }])
         .expect(201);
 
       // Check saint delta
@@ -194,8 +191,9 @@ describe("Sync routes", () => {
       const v1 = delta1.version as number;
 
       await request(getApp())
-        .delete("/api/morons/x/deltasaint/saints?platformUserId=goodperson")
+        .delete("/api/morons/x/deltasaint/saints")
         .set("Authorization", `Bearer ${ownerToken}`)
+        .send([{ platformUserId: "goodperson" }])
         .expect(200);
 
       const res2 = await request(getApp())

@@ -122,16 +122,51 @@ export function computeSync(
     const parentList = repos.moronList.findByPlatformAndSlug(platform, slug);
     if (parentList?.visibility !== "public") continue;
 
-    const moronEntries = repos.moronEntry.findAllByList(platform, slug);
-    const saintEntries = repos.saintEntry.findAllByList(platform, slug);
+    const snapshot = replayChangelog(repos, platform, slug);
 
     inherited[key] = {
-      morons: moronEntries.map((e) => e.platformUserId),
-      saints: saintEntries.map((e) => e.platformUserId),
+      morons: snapshot.morons,
+      saints: snapshot.saints,
     };
   }
 
   return { deltas, inherited, removed };
+}
+
+/**
+ * Replay changelog to compute the effective set of morons and saints.
+ */
+function replayChangelog(
+  repos: Repositories,
+  platform: string,
+  slug: string
+): { morons: string[]; saints: string[] } {
+  const allChangelog = repos.changelog.findByList(platform, slug, undefined, 100000);
+
+  const moronSet = new Set<string>();
+  const saintSet = new Set<string>();
+
+  for (const entry of allChangelog) {
+    switch (entry.action) {
+      case "ADD":
+        moronSet.add(entry.platformUserId);
+        break;
+      case "REMOVE":
+        moronSet.delete(entry.platformUserId);
+        break;
+      case "ADD_SAINT":
+        saintSet.add(entry.platformUserId);
+        break;
+      case "REMOVE_SAINT":
+        saintSet.delete(entry.platformUserId);
+        break;
+    }
+  }
+
+  return {
+    morons: Array.from(moronSet),
+    saints: Array.from(saintSet),
+  };
 }
 
 function buildSnapshot(
@@ -140,13 +175,12 @@ function buildSnapshot(
   slug: string,
   version: number
 ): ListSnapshot {
-  const moronEntries = repos.moronEntry.findAllByList(platform, slug);
-  const saintEntries = repos.saintEntry.findAllByList(platform, slug);
+  const snapshot = replayChangelog(repos, platform, slug);
 
   return {
     version,
-    morons: moronEntries.map((e) => e.platformUserId),
-    saints: saintEntries.map((e) => e.platformUserId),
+    morons: snapshot.morons,
+    saints: snapshot.saints,
   };
 }
 

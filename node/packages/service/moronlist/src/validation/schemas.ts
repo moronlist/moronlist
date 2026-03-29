@@ -76,51 +76,48 @@ export const popularQuery = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20),
 });
 
-// Entries
-export const createEntryBody = z.object({
-  platformUserId: z.string().min(1).max(200).trim(),
-  displayName: z.string().max(200).trim().optional(),
-  reason: z.string().max(1000).trim().optional(),
-});
+// Reusable field for platform user IDs in entry/saint payloads
+const platformUserIdField = z.string().min(1).max(200).trim();
 
-export const batchCreateEntriesBody = z.object({
-  entries: z
-    .array(
-      z.object({
-        platformUserId: z.string().min(1).max(200).trim(),
-        displayName: z.string().max(200).trim().optional(),
-        reason: z.string().max(1000).trim().optional(),
-      })
-    )
-    .min(1)
-    .max(1000),
-});
+// Entries (array-based, changelog-only)
+export const addEntriesBody = z
+  .array(
+    z.object({
+      platformUserId: platformUserIdField,
+      reason: z.string().max(1000).trim().optional(),
+    })
+  )
+  .min(1)
+  .max(1000);
 
-export const deleteEntryByPlatformUserQuery = z.object({
-  platformUserId: z.string().min(1).max(200).trim(),
-});
+export const removeEntriesBody = z
+  .array(
+    z.object({
+      platformUserId: platformUserIdField,
+    })
+  )
+  .min(1)
+  .max(1000);
 
-// Saints
-export const createSaintBody = z.object({
-  platformUserId: z.string().min(1).max(200).trim(),
-  reason: z.string().max(1000).trim().optional(),
-});
+// Saints (array-based, changelog-only)
+export const addSaintsBody = z
+  .array(
+    z.object({
+      platformUserId: platformUserIdField,
+      reason: z.string().max(1000).trim().optional(),
+    })
+  )
+  .min(1)
+  .max(1000);
 
-export const batchCreateSaintsBody = z.object({
-  saints: z
-    .array(
-      z.object({
-        platformUserId: z.string().min(1).max(200).trim(),
-        reason: z.string().max(1000).trim().optional(),
-      })
-    )
-    .min(1)
-    .max(1000),
-});
-
-export const deleteSaintByPlatformUserQuery = z.object({
-  platformUserId: z.string().min(1).max(200).trim(),
-});
+export const removeSaintsBody = z
+  .array(
+    z.object({
+      platformUserId: platformUserIdField,
+    })
+  )
+  .min(1)
+  .max(1000);
 
 // Inheritance
 export const updateParentsBody = z.object({

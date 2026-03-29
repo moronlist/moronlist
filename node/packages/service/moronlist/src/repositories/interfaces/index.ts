@@ -64,6 +64,7 @@ export type IMoronListRepository = {
   create(data: CreateMoronListData): MoronList;
   update(platform: string, slug: string, data: UpdateMoronListData): MoronList;
   incrementVersion(platform: string, slug: string): number;
+  updateEntryCounts(platform: string, slug: string, entryDelta: number, saintDelta: number): void;
   delete(platform: string, slug: string): boolean;
 };
 

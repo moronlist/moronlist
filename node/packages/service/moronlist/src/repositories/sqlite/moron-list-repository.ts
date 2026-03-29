@@ -313,6 +313,24 @@ function incrementVersion(db: SQLiteDatabase, platform: string, slug: string): n
   return newVersion;
 }
 
+function updateEntryCounts(
+  db: SQLiteDatabase,
+  platform: string,
+  slug: string,
+  entryDelta: number,
+  saintDelta: number
+): void {
+  const now = new Date().toISOString();
+  // Raw SQL exception: Tinqer does not support arithmetic expressions in SET
+  db.prepare(
+    `UPDATE moron_list
+     SET entry_count = entry_count + :entryDelta,
+         saint_count = saint_count + :saintDelta,
+         updated_at = :now
+     WHERE platform = :platform AND slug = :slug`
+  ).run({ entryDelta, saintDelta, now, platform, slug });
+}
+
 function deleteList(db: SQLiteDatabase, platform: string, slug: string): boolean {
   const deleted = executeDelete(
     db,
@@ -338,6 +356,8 @@ export function createMoronListRepository(db: SQLiteDatabase): IMoronListReposit
     create: (data) => create(db, data),
     update: (platform, slug, data) => update(db, platform, slug, data),
     incrementVersion: (platform, slug) => incrementVersion(db, platform, slug),
+    updateEntryCounts: (platform, slug, entryDelta, saintDelta) =>
+      updateEntryCounts(db, platform, slug, entryDelta, saintDelta),
     delete: (platform, slug) => deleteList(db, platform, slug),
   };
 }

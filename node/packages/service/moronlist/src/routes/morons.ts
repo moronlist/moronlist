@@ -179,15 +179,13 @@ export function createMoronRoutes(repos: Repositories): Router {
         return;
       }
 
-      const entryCount = repos.moronEntry.countByList(platform, slug);
-      const saintCount = repos.saintEntry.countByList(platform, slug);
       const subscriberCount = repos.subscription.countByList(platform, slug);
 
       res.json({
         list: {
           ...formatList(list),
-          entryCount,
-          saintCount,
+          entryCount: list.entryCount,
+          saintCount: list.saintCount,
           subscriberCount,
           isOwner: userId !== undefined && list.ownerId === userId,
           isSubscribed:
