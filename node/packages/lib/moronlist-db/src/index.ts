@@ -27,6 +27,5 @@ export type {
   MoronListDbRow,
   MoronListInheritanceDbRow,
   ChangelogDbRow,
-  FlushStateDbRow,
   SubscriptionDbRow,
 } from "./types.js";

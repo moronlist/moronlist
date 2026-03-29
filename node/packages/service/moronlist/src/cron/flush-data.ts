@@ -1,15 +1,21 @@
 /**
  * Flush changelog entries to static txt files and meta.json.
  *
- * For each list with unflushed changelog entries:
- *   1. Read unflushed entries from the database
- *   2. Convert each entry to a txt line (+, -, *, ~)
- *   3. Append lines to the active tail file (10k lines max per file)
- *   4. Write meta.json with list metadata and parent tree
- *   5. Mark entries as flushed and update flush state
+ * Stateless: compares the changelog in DB against files on disk.
+ * If there are more entries in DB than lines on disk, writes the diff.
+ * If files are deleted, rewrites everything from scratch.
+ *
+ * No flush markers in the DB. The files are the state.
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync } from "fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+  appendFileSync,
+  readdirSync,
+} from "fs";
 import { join } from "path";
 import { logger } from "logger";
 import type { Repositories } from "../repositories/interfaces/index.js";
@@ -66,29 +72,65 @@ function entryToLine(entry: ChangelogEntry): string {
   return `${prefix}${entry.platformUserId}`;
 }
 
-function countLinesInFile(filePath: string): number {
-  if (!existsSync(filePath)) {
+/**
+ * Count total lines across all txt files in a list directory.
+ * Files are named 1.txt, 2.txt, etc.
+ */
+function countLinesOnDisk(listDir: string): number {
+  if (!existsSync(listDir)) {
     return 0;
   }
-  const content = readFileSync(filePath, "utf-8");
-  if (content === "") {
-    return 0;
+
+  const files = readdirSync(listDir)
+    .filter((f) => f.endsWith(".txt"))
+    .sort(compareTxtFiles);
+  let total = 0;
+
+  for (const file of files) {
+    const content = readFileSync(join(listDir, file), "utf-8");
+    if (content !== "") {
+      total += content.split("\n").filter((line) => line !== "").length;
+    }
   }
-  // Count newlines; each line ends with \n
-  return content.split("\n").filter((line) => line !== "").length;
+
+  return total;
 }
 
-function readExistingMeta(listDir: string): MetaJson | null {
-  const metaPath = join(listDir, "meta.json");
-  if (!existsSync(metaPath)) {
-    return null;
+/**
+ * Sort txt file names numerically: 1.txt, 2.txt, ..., 10.txt
+ */
+function compareTxtFiles(a: string, b: string): number {
+  const numA = parseInt(a.replace(".txt", ""), 10);
+  const numB = parseInt(b.replace(".txt", ""), 10);
+  return numA - numB;
+}
+
+/**
+ * Get the current tail file index and its line count.
+ */
+function getTailFileState(listDir: string): { fileIndex: number; lineCount: number } {
+  if (!existsSync(listDir)) {
+    return { fileIndex: 1, lineCount: 0 };
   }
-  try {
-    const raw = readFileSync(metaPath, "utf-8");
-    return JSON.parse(raw) as MetaJson;
-  } catch {
-    return null;
+
+  const files = readdirSync(listDir)
+    .filter((f) => f.endsWith(".txt"))
+    .sort(compareTxtFiles);
+
+  if (files.length === 0) {
+    return { fileIndex: 1, lineCount: 0 };
   }
+
+  const lastFile = files[files.length - 1];
+  if (lastFile === undefined) {
+    return { fileIndex: 1, lineCount: 0 };
+  }
+
+  const fileIndex = parseInt(lastFile.replace(".txt", ""), 10);
+  const content = readFileSync(join(listDir, lastFile), "utf-8");
+  const lineCount = content === "" ? 0 : content.split("\n").filter((line) => line !== "").length;
+
+  return { fileIndex, lineCount };
 }
 
 function buildParentTree(
@@ -128,42 +170,42 @@ function buildParentTree(
 }
 
 function flushList(repos: Repositories, dataDir: string, platform: string, slug: string): boolean {
-  const entries = repos.changelog.findUnflushed(platform, slug);
-  if (entries.length === 0) {
-    return true;
-  }
-
   const list = repos.moronList.findByPlatformAndSlug(platform, slug);
   if (list === null) {
     logger.error("List not found for flush", { platform, slug });
     return false;
   }
 
+  // Get ALL changelog entries for this list, ordered by version
+  const allEntries = repos.changelog.findByList(platform, slug, undefined, 1_000_000);
+
   const listDir = join(dataDir, platform, slug);
+  const linesOnDisk = countLinesOnDisk(listDir);
+
+  // Nothing new to write
+  if (allEntries.length <= linesOnDisk) {
+    return true;
+  }
+
+  // The entries we need to write are everything after what's already on disk
+  const newEntries = allEntries.slice(linesOnDisk);
+
   mkdirSync(listDir, { recursive: true });
 
-  // Determine current file state from existing meta or start fresh
-  const existingMeta = readExistingMeta(listDir);
-  let totalEntries = existingMeta?.entries ?? 0;
-  let fileCount = existingMeta?.files ?? 1;
+  // Get current tail file state
+  let { fileIndex, lineCount: tailLineCount } = getTailFileState(listDir);
 
-  // Check the current tail file line count
-  let tailFilePath = join(listDir, `${String(fileCount)}.txt`);
-  let tailLineCount = countLinesInFile(tailFilePath);
-
-  // Convert entries to lines and append
-  const lines = entries.map(entryToLine);
-
+  // Append new lines
+  const lines = newEntries.map(entryToLine);
   for (const line of lines) {
     if (tailLineCount >= MAX_LINES_PER_FILE) {
-      fileCount += 1;
-      tailFilePath = join(listDir, `${String(fileCount)}.txt`);
+      fileIndex += 1;
       tailLineCount = 0;
     }
 
-    appendFileSync(tailFilePath, line + "\n", "utf-8");
+    const filePath = join(listDir, `${String(fileIndex)}.txt`);
+    appendFileSync(filePath, line + "\n", "utf-8");
     tailLineCount += 1;
-    totalEntries += 1;
   }
 
   // Build parent tree
@@ -173,14 +215,17 @@ function flushList(repos: Repositories, dataDir: string, platform: string, slug:
   const subscriberCount = repos.subscription.countByList(platform, slug);
 
   // Write meta.json
+  const totalLines = linesOnDisk + newEntries.length;
+  const totalFiles = fileIndex;
+
   const meta: MetaJson = {
     platform: list.platform,
     slug: list.slug,
     name: list.name,
     description: list.description,
     version: list.version,
-    entries: totalEntries,
-    files: fileCount,
+    entries: totalLines,
+    files: totalFiles,
     parents: parentTree,
     subscriberCount,
     createdAt: list.createdAt.toISOString(),
@@ -189,34 +234,34 @@ function flushList(repos: Repositories, dataDir: string, platform: string, slug:
 
   writeFileSync(join(listDir, "meta.json"), JSON.stringify(meta, null, 2) + "\n", "utf-8");
 
-  // Mark entries as flushed up to the highest version
-  const lastEntry = entries[entries.length - 1];
-  if (lastEntry === undefined) return false;
-  const maxVersion = lastEntry.version;
-  repos.changelog.markFlushed(platform, slug, maxVersion);
-  repos.flushState.updateState(platform, slug, maxVersion);
-
-  logger.info("Flushed list", { platform, slug, entries: entries.length, totalEntries, fileCount });
+  logger.info("Flushed list", {
+    platform,
+    slug,
+    newEntries: newEntries.length,
+    totalEntries: totalLines,
+    files: totalFiles,
+  });
   return true;
 }
 
 export function flushData(repos: Repositories, dataDir: string): FlushResult {
   mkdirSync(dataDir, { recursive: true });
 
-  const listsToFlush = repos.changelog.findListsWithUnflushed();
+  // Get all lists that have any changelog entries
+  const allLists = repos.moronList.findAllPublic();
   let flushed = 0;
   let errors = 0;
 
-  for (const { platform, slug } of listsToFlush) {
+  for (const list of allLists) {
     try {
-      const ok = flushList(repos, dataDir, platform, slug);
+      const ok = flushList(repos, dataDir, list.platform, list.slug);
       if (ok) {
         flushed += 1;
       } else {
         errors += 1;
       }
     } catch (error) {
-      logger.error("Failed to flush list", { platform, slug, error });
+      logger.error("Failed to flush list", { platform: list.platform, slug: list.slug, error });
       errors += 1;
     }
   }

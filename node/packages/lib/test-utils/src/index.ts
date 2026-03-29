@@ -368,7 +368,6 @@ export function insertTestChangelog(
         platform_user_id: p.platformUserId,
         user_id: p.userId,
         reason: p.reason,
-        flush_version: p.flushVersion,
         created_at: p.createdAt,
       }),
     {
@@ -380,7 +379,6 @@ export function insertTestChangelog(
       platformUserId: data.platform_user_id,
       userId: data.user_id,
       reason: data.reason ?? null,
-      flushVersion: null,
       createdAt: now,
     }
   );

@@ -53,16 +53,7 @@ export type ChangelogDbRow = {
   platform_user_id: string;
   user_id: string; // FK to user.id
   reason: string | null;
-  flush_version: number | null;
   created_at: string;
-};
-
-// Flush state table row
-export type FlushStateDbRow = {
-  list_platform: string;
-  list_slug: string;
-  last_flushed_version: number;
-  last_flushed_at: string | null;
 };
 
 // Subscription table row

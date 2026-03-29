@@ -9,7 +9,6 @@ import { createUserRepository } from "./user-repository.js";
 import { createMoronListRepository } from "./moron-list-repository.js";
 import { createInheritanceRepository } from "./inheritance-repository.js";
 import { createChangelogRepository } from "./changelog-repository.js";
-import { createFlushStateRepository } from "./flush-state-repository.js";
 import { createSubscriptionRepository } from "./subscription-repository.js";
 
 export function createRepositories(dbPath: string): Repositories {
@@ -23,7 +22,6 @@ export function createRepositories(dbPath: string): Repositories {
     moronList: createMoronListRepository(db),
     inheritance: createInheritanceRepository(db),
     changelog: createChangelogRepository(db),
-    flushState: createFlushStateRepository(db),
     subscription: createSubscriptionRepository(db),
   };
 }
